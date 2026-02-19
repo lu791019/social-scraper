@@ -13,6 +13,12 @@ venv/
 *.db
 *.sqlite
 
+# Credentials
+credentials.json
+
+# Temp
+/tmp/
+
 # OS
 .DS_Store
 
