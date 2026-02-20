@@ -30,14 +30,17 @@ def test_get_pending_rows_returns_empty_for_all_processed(mock_ws):
     assert len(pending) == 0
 
 
+@patch("services.sheet.date")
 @patch("services.sheet.get_worksheet")
-def test_write_result_updates_b_and_c_columns(mock_ws):
-    """Scenario: 摘要寫入 B 欄、關鍵點寫入 C 欄"""
+def test_write_result_updates_b_c_d_columns(mock_ws, mock_date):
+    """Scenario: 摘要寫入 B 欄、關鍵點寫入 C 欄、日期寫入 D 欄"""
+    mock_date.today.return_value.isoformat.return_value = "2026-02-20"
     mock_worksheet = MagicMock()
     mock_ws.return_value = mock_worksheet
     write_result(2, summary="短摘要", key_points="• 重點一")
     mock_worksheet.update_cell.assert_any_call(2, 2, "短摘要")
     mock_worksheet.update_cell.assert_any_call(2, 3, "• 重點一")
+    mock_worksheet.update_cell.assert_any_call(2, 4, "2026-02-20")
 
 
 @patch("services.sheet.get_worksheet")

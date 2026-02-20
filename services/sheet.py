@@ -1,4 +1,5 @@
 import textwrap
+from datetime import date
 
 import gspread
 from config import GOOGLE_SHEET_URL, GOOGLE_CREDENTIALS_PATH
@@ -42,10 +43,11 @@ def wrap_text(text: str, width: int = 40) -> str:
 
 
 def write_result(row_num: int, summary: str, key_points: str) -> None:
-    """將摘要寫入 B 欄、關鍵點寫入 C 欄"""
+    """將摘要寫入 B 欄、關鍵點寫入 C 欄、日期寫入 D 欄"""
     ws = get_worksheet()
     ws.update_cell(row_num, 2, wrap_text(summary))
     ws.update_cell(row_num, 3, wrap_text(key_points))
+    ws.update_cell(row_num, 4, date.today().isoformat())
 
 
 def write_error(row_num: int, error_msg: str) -> None:
