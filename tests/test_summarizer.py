@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-from services.summarizer import summarize, format_raw_content
+from services.summarizer import summarize, extract_key_points, format_raw_content
 
 
 def test_format_raw_content_with_all_fields():
@@ -40,3 +40,13 @@ async def test_summarize_returns_text(mock_run):
     mock_run.return_value = "這是 AI 摘要"
     result = await summarize("一些原始內容")
     assert result == "這是 AI 摘要"
+
+
+@pytest.mark.asyncio
+@patch("services.summarizer.run_claude_print")
+async def test_extract_key_points_returns_text(mock_run):
+    """Scenario: claude --print 回傳關鍵點"""
+    mock_run.return_value = "• 重點一\n• 重點二\n• 重點三"
+    result = await extract_key_points("一些原始內容")
+    assert "• 重點一" in result
+    assert result.count("•") == 3

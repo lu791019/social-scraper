@@ -21,3 +21,13 @@ async def summarize(raw_content: str) -> str:
         f"{raw_content}"
     )
     return await run_claude_print(prompt)
+
+
+async def extract_key_points(raw_content: str) -> str:
+    """用 claude --print 提取 3~5 個關鍵點"""
+    prompt = (
+        "請從以下社群貼文內容中，用繁體中文提取 3~5 個關鍵點或重要語句。"
+        "每個關鍵點用「• 」開頭，一行一個，不要額外說明：\n\n"
+        f"{raw_content}"
+    )
+    return await run_claude_print(prompt)

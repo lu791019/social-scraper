@@ -15,10 +15,10 @@ async def test_scrape_real_ig_post():
     browser, context = await create_browser()
     try:
         url = "https://www.instagram.com/p/DU3ijLaEiw_/"
-        raw_content, summary = await process_post(context, url)
-        assert len(raw_content) > 0
+        summary, key_points = await process_post(context, url)
         assert len(summary) > 0
-        print(f"\n--- Raw ---\n{raw_content}\n--- Summary ---\n{summary}")
+        assert len(key_points) > 0
+        print(f"\n--- Summary ---\n{summary}\n--- Key Points ---\n{key_points}")
     finally:
         await browser.close()
 
@@ -30,9 +30,9 @@ async def test_scrape_real_threads_post():
     browser, context = await create_browser()
     try:
         url = "https://www.threads.net/@natgeo/post/DU8qr-5kVWm"
-        raw_content, summary = await process_post(context, url)
-        assert len(raw_content) > 0
+        summary, key_points = await process_post(context, url)
         assert len(summary) > 0
-        print(f"\n--- Raw ---\n{raw_content}\n--- Summary ---\n{summary}")
+        assert len(key_points) > 0
+        print(f"\n--- Summary ---\n{summary}\n--- Key Points ---\n{key_points}")
     finally:
         await browser.close()

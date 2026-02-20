@@ -9,7 +9,7 @@ from scraper.threads import scrape_threads
 from media.ocr import process_images
 from media.transcriber import process_video
 from services.sheet import get_pending_rows, write_result, write_error
-from services.summarizer import summarize, format_raw_content
+from services.summarizer import summarize, extract_key_points, format_raw_content
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -18,14 +18,14 @@ logger = logging.getLogger(__name__)
 def detect_platform(url: str) -> str:
     if "instagram.com" in url:
         return "instagram"
-    elif "threads.net" in url:
+    elif "threads.net" in url or "threads.com" in url:
         return "threads"
     else:
         raise ValueError(f"不支援的平台: {url}")
 
 
 async def process_post(context, url: str) -> tuple[str, str]:
-    """處理單篇貼文：爬取 → 媒體處理 → 摘要，回傳 (raw_content, summary)"""
+    """處理單篇貼文：爬取 → 媒體處理 → 摘要+關鍵點，回傳 (summary, key_points)"""
     platform = detect_platform(url)
 
     if platform == "instagram":
@@ -48,8 +48,9 @@ async def process_post(context, url: str) -> tuple[str, str]:
     )
 
     summary = await summarize(raw_content)
+    key_points = await extract_key_points(raw_content)
 
-    return raw_content, summary
+    return summary, key_points
 
 
 async def main():
@@ -66,8 +67,8 @@ async def main():
         for row_num, url in pending:
             logger.info(f"處理第 {row_num} 列: {url}")
             try:
-                raw_content, summary = await process_post(context, url)
-                write_result(row_num, raw_content, summary)
+                summary, key_points = await process_post(context, url)
+                write_result(row_num, summary, key_points)
                 logger.info(f"第 {row_num} 列完成")
             except Exception as e:
                 logger.error(f"第 {row_num} 列失敗: {e}")

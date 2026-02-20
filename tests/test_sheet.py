@@ -1,17 +1,17 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from services.sheet import get_pending_rows, write_result, write_error
+from services.sheet import get_pending_rows, write_result, write_error, wrap_text
 
 
 @patch("services.sheet.get_worksheet")
-def test_get_pending_rows_finds_empty_c_column(mock_ws):
-    """Scenario: A 欄有值但 C 欄為空 → 待處理"""
+def test_get_pending_rows_finds_empty_b_column(mock_ws):
+    """Scenario: A 欄有值但 B 欄為空 → 待處理"""
     mock_ws.return_value.get_all_values.return_value = [
-        ["社群連結", "原始內容", "AI 摘要"],
-        ["https://instagram.com/p/abc", "", ""],
-        ["https://threads.net/@user/post/xyz", "已有內容", "已有摘要"],
-        ["https://instagram.com/p/def", "", ""],
-        ["", "", ""],
+        ["社群連結", "AI 摘要"],
+        ["https://instagram.com/p/abc", ""],
+        ["https://threads.net/@user/post/xyz", "已有摘要"],
+        ["https://instagram.com/p/def", ""],
+        ["", ""],
     ]
     pending = get_pending_rows()
     assert len(pending) == 2
@@ -23,8 +23,8 @@ def test_get_pending_rows_finds_empty_c_column(mock_ws):
 def test_get_pending_rows_returns_empty_for_all_processed(mock_ws):
     """Scenario: 所有列都已處理 → 空列表"""
     mock_ws.return_value.get_all_values.return_value = [
-        ["社群連結", "原始內容", "AI 摘要"],
-        ["https://instagram.com/p/abc", "內容", "摘要"],
+        ["社群連結", "AI 摘要"],
+        ["https://instagram.com/p/abc", "摘要"],
     ]
     pending = get_pending_rows()
     assert len(pending) == 0
@@ -32,18 +32,37 @@ def test_get_pending_rows_returns_empty_for_all_processed(mock_ws):
 
 @patch("services.sheet.get_worksheet")
 def test_write_result_updates_b_and_c_columns(mock_ws):
-    """Scenario: 寫入結果到 B 欄和 C 欄"""
+    """Scenario: 摘要寫入 B 欄、關鍵點寫入 C 欄"""
     mock_worksheet = MagicMock()
     mock_ws.return_value = mock_worksheet
-    write_result(2, raw_content="原始文字", summary="AI 摘要")
-    mock_worksheet.update_cell.assert_any_call(2, 2, "原始文字")
-    mock_worksheet.update_cell.assert_any_call(2, 3, "AI 摘要")
+    write_result(2, summary="短摘要", key_points="• 重點一")
+    mock_worksheet.update_cell.assert_any_call(2, 2, "短摘要")
+    mock_worksheet.update_cell.assert_any_call(2, 3, "• 重點一")
 
 
 @patch("services.sheet.get_worksheet")
-def test_write_error_marks_c_column(mock_ws):
-    """Scenario: 錯誤訊息寫入 C 欄"""
+def test_write_error_marks_b_column(mock_ws):
+    """Scenario: 錯誤訊息寫入 B 欄"""
     mock_worksheet = MagicMock()
     mock_ws.return_value = mock_worksheet
     write_error(2, "載入逾時")
-    mock_worksheet.update_cell.assert_called_once_with(2, 3, "[ERROR] 載入逾時")
+    mock_worksheet.update_cell.assert_called_once_with(2, 2, "[ERROR] 載入逾時")
+
+
+def test_wrap_text_short_text_unchanged():
+    assert wrap_text("短文字", width=40) == "短文字"
+
+
+def test_wrap_text_long_text_wraps():
+    text = "這是一段超過四十個字的長文字，需要在適當的位置換行以確保在試算表中的可讀性良好"
+    result = wrap_text(text, width=40)
+    for line in result.split("\n"):
+        assert len(line) <= 40
+
+
+def test_wrap_text_preserves_existing_newlines():
+    text = "第一行\n第二行"
+    result = wrap_text(text, width=40)
+    assert "第一行" in result
+    assert "第二行" in result
+    assert result.count("\n") >= 1
