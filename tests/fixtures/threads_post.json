@@ -1,0 +1,83 @@
+{
+  "caption": {
+    "text": "At the risk of being controversial, we think Earth has the best moon in the solar system. Not too big, not too small, controls the tides just right. A 10/10 satellite.",
+    "pk": "17954362553935124",
+    "has_translation": null
+  },
+  "media_type": 19,
+  "code": "DU8qr-5kVWm",
+  "image_versions2": {
+    "candidates": []
+  },
+  "video_versions": null,
+  "carousel_media": null,
+  "has_audio": null,
+  "original_height": 612,
+  "original_width": 612,
+  "text_post_app_info": {
+    "is_ghost_post": false,
+    "id": "XDTTextPostAppMediaInfo:17954362520935124",
+    "show_header_follow": false,
+    "self_thread_info": null,
+    "is_spoiler_media": false,
+    "is_markup": false,
+    "ghost_post_exp_time_ms": null,
+    "ghost_post_approximate_like_count_str": null,
+    "ghost_post_reply_type": null,
+    "ghost_post_approximate_reply_count_str": null,
+    "direct_reply_count": 10,
+    "repost_count": 10,
+    "quote_count": 1,
+    "reshare_count": 1,
+    "custom_feed_preview_info": null,
+    "platform_podcast_episode_info": null,
+    "platform_podcast_info": null,
+    "link_preview_attachment": null,
+    "link_preview_response": null,
+    "linked_inline_media": null,
+    "snippet_attachment_info": null,
+    "special_effects_enabled_str": "",
+    "algo_tweaks_info": null,
+    "text_fragments": {
+      "fragments": [
+        {
+          "fragment_type": "plaintext",
+          "link_fragment": null,
+          "mention_fragment": null,
+          "plaintext": "At the risk of being controversial, we think Earth has the best moon in the solar system. Not too big, not too small, controls the tides just right. A 10/10 satellite.",
+          "linkified_web_url": null,
+          "linkified_in_app_url": null,
+          "styling_info": null
+        }
+      ]
+    },
+    "share_info": {
+      "quoted_attachment_author_attribution_allowed": true,
+      "quoted_attachment_post_unavailable": false,
+      "quoted_attachment_post": null,
+      "quoted_post": null,
+      "reposted_post": null
+    },
+    "is_reply": false,
+    "reply_to_author": null,
+    "system_status_message": null,
+    "reply_control": "everyone",
+    "private_reply_partner": null,
+    "self_thread_count": 0,
+    "tag_header": null,
+    "root_post_author": null,
+    "is_liked_by_root_author": false,
+    "pinned_post_info": {
+      "is_pinned_to_parent_post": false,
+      "is_pinned_to_profile": false
+    },
+    "related_trends_info": null,
+    "is_post_unavailable": false,
+    "post_unavailable_reason": null,
+    "post_tombstone_info": null,
+    "hush_info": null,
+    "can_private_reply": false,
+    "can_reply": false,
+    "author_notif_control": null
+  }
+}
