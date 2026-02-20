@@ -10,15 +10,15 @@ async def run_claude_print(prompt: str, image_path: Path | None = None) -> str:
     """呼叫 claude --print，走 Max 額度不花 API"""
     cmd = [CLAUDE_CLI, "--print"]
     if image_path:
-        cmd.extend(["--image", str(image_path)])
-    cmd.append(prompt)
+        cmd.extend(["--allowed-tools", "Read"])
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
+        stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    stdout, stderr = await proc.communicate(input=prompt.encode())
 
     if proc.returncode != 0:
         raise RuntimeError(f"claude --print 失敗: {stderr.decode().strip()}")
@@ -41,9 +41,9 @@ async def download_image(image_url: str) -> Path:
 
 
 async def extract_image_text(image_path: Path) -> str:
-    """用 claude --print 擷取圖片上的文字"""
+    """用 claude --print + Read 工具擷取圖片上的文字"""
     text = await run_claude_print(
-        "請擷取這張圖片上的所有文字，保持原始排版。如果圖片上完全沒有文字，只回覆「無文字」。",
+        f"請讀取圖片 {image_path.resolve()} 並擷取上面所有文字，保持原始排版。如果圖片上完全沒有文字，只回覆「無文字」。",
         image_path=image_path,
     )
     if text == "無文字":
