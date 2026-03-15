@@ -25,3 +25,9 @@ credentials.json
 # IDE
 .vscode/
 .idea/
+
+# Firecrawl cache
+.firecrawl/
+
+# Claude
+.claude/
