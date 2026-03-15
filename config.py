@@ -26,5 +26,9 @@ MAX_RETRIES = 1
 # Proxy (None for MVP)
 PROXY_URL: str | None = os.environ.get("PROXY_URL")
 
+# LINE Bot
+LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+
 # Temp directory for video downloads
 TEMP_DIR = Path("/tmp/social-scraper")

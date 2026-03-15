@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from services.sheet import get_pending_rows, write_result, write_error, wrap_text
+from services.sheet import get_pending_rows, write_result, write_error, wrap_text, append_url
 
 
 @patch("services.sheet.get_worksheet")
@@ -69,3 +69,17 @@ def test_wrap_text_preserves_existing_newlines():
     assert "第一行" in result
     assert "第二行" in result
     assert result.count("\n") >= 1
+
+
+@patch("services.sheet.get_worksheet")
+def test_append_url_writes_to_next_empty_row(mock_ws):
+    """Scenario: URL 寫入 A 欄下一個空行"""
+    mock_worksheet = MagicMock()
+    mock_worksheet.get_all_values.return_value = [
+        ["社群連結", "AI 摘要"],
+        ["https://instagram.com/p/abc", "摘要"],
+    ]
+    mock_ws.return_value = mock_worksheet
+    row_num = append_url("https://instagram.com/p/new")
+    assert row_num == 3
+    mock_worksheet.update_cell.assert_called_once_with(3, 1, "https://instagram.com/p/new")

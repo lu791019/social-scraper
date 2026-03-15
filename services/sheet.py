@@ -54,3 +54,12 @@ def write_error(row_num: int, error_msg: str) -> None:
     """將錯誤訊息寫入 B 欄"""
     ws = get_worksheet()
     ws.update_cell(row_num, 2, f"[ERROR] {error_msg}")
+
+
+def append_url(url: str) -> int:
+    """將 URL 寫入 Sheet A 欄的下一個空行，回傳寫入的列號"""
+    ws = get_worksheet()
+    rows = ws.get_all_values()
+    next_row = len(rows) + 1
+    ws.update_cell(next_row, 1, url)
+    return next_row

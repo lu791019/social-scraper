@@ -35,9 +35,19 @@
 - [x] Task 9: 主控流程 → `c305cfc`
 - [x] Task 10: 端對端整合測試 → `c305cfc`
 
+## Section F: LLM 呼叫優化 (完成)
+- [x] Task 11: 合併 summarize + key_points 為單次呼叫 → `88235ef`
+- [x] Task 12: 批次 OCR（多張圖合併一次 claude --print） → `88235ef`
+
+## Section G: LINE Bot 整合
+- [ ] Task 13: LINE Bot 前置設定（LINE Developers Console、環境變數）
+- [ ] Task 14: LINE webhook server（FastAPI + line-bot-sdk）
+- [ ] Task 15: 訊息處理邏輯（URL 提取、平台驗證、寫入 Sheet）
+- [ ] Task 16: 單元測試 + 手動驗證
+
 ## Notes
 - 零 API 成本方案：`claude --print`（走 Max 額度）+ `mlx-whisper`（本地 M1 加速）
 - Task 3、4 spike 發現 IG/Threads 新版 JSON 結構（2025+），parser 已適配
 - 共用 `PostData` dataclass 和 `_extract_image`/`_extract_video` helpers（DRY）
-- 32 個單元測試全部通過
+- 40 個單元測試全部通過
 - 整合測試需要：關閉 Chrome、真實 Sheet、claude CLI Max 訂閱

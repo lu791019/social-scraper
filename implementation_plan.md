@@ -1,56 +1,64 @@
-# Social Scraper — Implementation Plan
+# LINE Bot → Google Sheet 整合 Implementation Plan
 
-> **完整 plan 見**: `docs/plans/2026-02-19-social-scraper-implementation.md`
-> **設計文件見**: `docs/plans/2026-02-19-social-scraper-design.md`
+## Goal Description
+建立 LINE Bot webhook server，讓使用者在 LINE 傳送社群連結，Bot 自動寫入 Google Sheet A 欄，接入現有的 scraper 流程。
 
-## 前置條件
-- Branch: `feat/social-scraper`
-- 最後 commit: `ea4845b` (docs: 更新實作計劃)
-- 環境：ffmpeg v8.0.1, Python 3.12+, claude CLI 2.1.39 (Max 5x), M1 Mac
-- credentials.json 已就位，Google Sheet 已共享
+## User Review Required
+> **NOTE**
+> - **LINE Official Account**：需要使用者自行到 [LINE Developers Console](https://developers.line.biz/) 建立 Messaging API channel，取得 Channel Secret + Channel Access Token
+> - **框架選擇**：FastAPI（輕量、async、與現有 codebase 風格一致）
+> - **部署平台**：先本地開發驗證，部署方案由使用者決定（Railway / Render / VPS 等）
+> - **觸發 scraper**：Bot 寫入 Sheet 後，可選擇自動觸發 scraper 或維持手動執行
+> - **URL 驗證**：只接受 instagram.com / threads.net 連結，其他忽略並回覆提示
 
-## 執行順序
+## Proposed Changes
 
+### Project Structure
 ```
-Task 1 (骨架) → Task 2 (瀏覽器)
-                    ↓
-            ┌───────┴───────┐
-            ↓               ↓
-      Task 3 (IG)     Task 4 (Threads)   ← 可並行但都依賴 spike
-            └───────┬───────┘
-            ┌───────┴───────┐
-            ↓               ↓
-      Task 5 (OCR)    Task 6 (STT)       ← 可並行
-            └───────┬───────┘
-                    ↓
-              Task 7 (Sheet)              ← 獨立，可提前做
-                    ↓
-              Task 8 (摘要)
-                    ↓
-              Task 9 (主控)
-                    ↓
-              Task 10 (E2E)
+social-scraper/
+├── linebot/
+│   ├── __init__.py
+│   ├── app.py            # FastAPI webhook server
+│   └── line_handler.py   # LINE 訊息處理邏輯（提取 URL、驗證、回覆）
+├── services/
+│   └── sheet.py           # [MODIFY] 新增 append_url() 函式
+├── .env.example           # [MODIFY] 新增 LINE_CHANNEL_SECRET、LINE_CHANNEL_ACCESS_TOKEN
+├── config.py              # [MODIFY] 新增 LINE 相關設定
+└── tests/
+    ├── test_line_handler.py  # LINE 訊息解析測試
+    └── test_sheet.py         # [MODIFY] 新增 append_url 測試
 ```
 
-## 各 Task 摘要
+### Components
 
-| # | 做什麼 | 關鍵檔案 | 驗證方式 |
-|---|--------|----------|----------|
-| 1 | uv 初始化、config、目錄結構 | `pyproject.toml`, `config.py` | `uv sync` 成功 |
-| 2 | Patchright 瀏覽器 + UA/viewport 輪替 | `scraper/browser.py` | `pytest tests/test_browser.py` |
-| 3 | IG 貼文爬取（spike 探索 JSON → 解析器） | `scraper/instagram.py` | fixture-based 單元測試 |
-| 4 | Threads 貼文爬取（spike 探索 JSON → 解析器） | `scraper/threads.py` | fixture-based 單元測試 |
-| 5 | 圖片 OCR via `claude --print --image` | `media/ocr.py` | mock subprocess 測試 |
-| 6 | 影片→ffmpeg→mlx-whisper 本地 STT | `media/transcriber.py` | ffmpeg 真實測試 + mock whisper |
-| 7 | gspread 讀 A 欄 URL、寫 B/C 欄 | `services/sheet.py` | mock worksheet 測試 |
-| 8 | `claude --print` 產摘要 | `services/summarizer.py` | mock subprocess + format 測試 |
-| 9 | 主控流程串接所有模組 | `main.py` | `detect_platform` 單元測試 |
-| 10 | 真實 URL 端對端測試 | `tests/test_integration.py` | 真實環境跑 `python main.py` |
+- `[NEW] linebot/app.py`
+  FastAPI 應用，掛載 LINE webhook endpoint (`POST /callback`)，驗證 signature，分派訊息
 
-## 技術要點
+- `[NEW] linebot/line_handler.py`
+  從 LINE 訊息中提取 URL → 驗證是否為支援平台 → 呼叫 sheet.append_url() → 回覆使用者
 
-- **Spike 步驟**（Task 3、4）：先用 Patchright 開真實頁面，dump 嵌入 JSON，分析結構後才寫 parser。JSON 路徑會因 Meta 更新而變，parser 使用遞迴搜尋而非硬編碼路徑
-- **claude --print 注意事項**：走 Pro/Max 額度不花 API；輸出偶帶思考殘留，需要 `.strip()`；每次呼叫是獨立 subprocess
-- **Patchright 限制**：不能與已開啟的 Chrome 共存，執行前需先關閉所有 Chrome
-- **mlx-whisper**：首次執行自動下載模型（~1.5GB），之後使用本地快取
-- **Google Sheet 欄位**：A=社群連結、B=原始內容（【貼文文字】【圖片文字】【影片逐字稿】）、C=AI 摘要
+- `[MODIFY] services/sheet.py`
+  新增 `append_url(url: str)` — 將 URL 寫入 Sheet A 欄下一空行，回傳寫入的列號
+
+- `[MODIFY] config.py`
+  新增 `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN` 環境變數
+
+- `[MODIFY] .env.example`
+  新增 LINE 相關環境變數範例
+
+- `[NEW] tests/test_line_handler.py`
+  測試 URL 提取、平台驗證、無效訊息處理
+
+## Verification Plan
+
+### Manual Verification
+1. 啟動 FastAPI server (`uvicorn linebot.app:app`)
+2. 用 ngrok 暴露本地 port，設定為 LINE webhook URL
+3. 在 LINE 傳送 IG/Threads 連結 → 確認 Google Sheet 新增一列
+4. 傳送無效連結 → 確認 Bot 回覆提示訊息
+5. 傳送純文字（非 URL）→ 確認 Bot 忽略或提示
+
+### Automated Tests
+- LINE 訊息 URL 提取邏輯（mock LINE SDK）
+- 平台驗證（instagram.com / threads.net / 不支援的 URL）
+- sheet.append_url() 寫入正確位置
