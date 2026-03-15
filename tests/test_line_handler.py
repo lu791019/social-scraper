@@ -1,4 +1,4 @@
-from linebot.line_handler import extract_urls, is_supported_url
+from line_webhook.line_handler import extract_urls, is_supported_url
 
 
 def test_extract_urls_instagram():
