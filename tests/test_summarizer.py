@@ -1,6 +1,10 @@
 import pytest
 from unittest.mock import patch
-from services.summarizer import summarize, extract_key_points, format_raw_content
+from services.summarizer import (
+    summarize_and_extract,
+    format_raw_content,
+    _parse_summary_and_key_points,
+)
 
 
 def test_format_raw_content_with_all_fields():
@@ -33,20 +37,37 @@ def test_format_raw_content_empty_caption():
     assert "【圖片文字】" in result
 
 
-@pytest.mark.asyncio
-@patch("services.summarizer.run_claude_print")
-async def test_summarize_returns_text(mock_run):
-    """Scenario: claude --print 回傳摘要"""
-    mock_run.return_value = "這是 AI 摘要"
-    result = await summarize("一些原始內容")
-    assert result == "這是 AI 摘要"
+def test_parse_summary_and_key_points_normal():
+    """Scenario: 標準格式回應"""
+    text = "【摘要】\n這是摘要內容。\n\n【關鍵點】\n• 重點一\n• 重點二\n• 重點三"
+    summary, key_points = _parse_summary_and_key_points(text)
+    assert summary == "這是摘要內容。"
+    assert "• 重點一" in key_points
+    assert key_points.count("•") == 3
+
+
+def test_parse_summary_and_key_points_no_markers():
+    """Scenario: LLM 沒按格式回 → 全部當摘要"""
+    text = "這只是一段普通文字"
+    summary, key_points = _parse_summary_and_key_points(text)
+    assert summary == "這只是一段普通文字"
+    assert key_points == ""
+
+
+def test_parse_summary_and_key_points_only_summary():
+    """Scenario: 只有摘要標記，沒有關鍵點"""
+    text = "【摘要】\n這是摘要"
+    summary, key_points = _parse_summary_and_key_points(text)
+    assert summary == "這是摘要"
+    assert key_points == ""
 
 
 @pytest.mark.asyncio
 @patch("services.summarizer.run_claude_print")
-async def test_extract_key_points_returns_text(mock_run):
-    """Scenario: claude --print 回傳關鍵點"""
-    mock_run.return_value = "• 重點一\n• 重點二\n• 重點三"
-    result = await extract_key_points("一些原始內容")
-    assert "• 重點一" in result
-    assert result.count("•") == 3
+async def test_summarize_and_extract_returns_tuple(mock_run):
+    """Scenario: claude --print 一次回傳摘要+關鍵點"""
+    mock_run.return_value = "【摘要】\n這是 AI 摘要\n\n【關鍵點】\n• 重點一\n• 重點二\n• 重點三"
+    summary, key_points = await summarize_and_extract("一些原始內容")
+    assert summary == "這是 AI 摘要"
+    assert "• 重點一" in key_points
+    mock_run.assert_called_once()

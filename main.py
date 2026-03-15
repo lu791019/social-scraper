@@ -9,7 +9,7 @@ from scraper.threads import scrape_threads
 from media.ocr import process_images
 from media.transcriber import process_video
 from services.sheet import get_pending_rows, write_result, write_error
-from services.summarizer import summarize, extract_key_points, format_raw_content
+from services.summarizer import summarize_and_extract, format_raw_content
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,8 +47,7 @@ async def process_post(context, url: str) -> tuple[str, str]:
         transcript=transcript,
     )
 
-    summary = await summarize(raw_content)
-    key_points = await extract_key_points(raw_content)
+    summary, key_points = await summarize_and_extract(raw_content)
 
     return summary, key_points
 
