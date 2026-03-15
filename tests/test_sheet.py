@@ -1,6 +1,9 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from services.sheet import get_pending_rows, write_result, write_error, wrap_text, append_url
+from services.sheet import (
+    get_pending_rows, write_result, write_error, wrap_text, append_url,
+    get_github_worksheet, append_github_repo, write_github_result, write_github_error,
+)
 
 
 @patch("services.sheet.get_worksheet")
@@ -83,3 +86,42 @@ def test_append_url_writes_to_next_empty_row(mock_ws):
     row_num = append_url("https://instagram.com/p/new")
     assert row_num == 3
     mock_worksheet.update_cell.assert_called_once_with(3, 1, "https://instagram.com/p/new")
+
+
+# --- GitHub worksheet tests ---
+
+@patch("services.sheet.get_github_worksheet")
+def test_append_github_repo_writes_to_next_row(mock_ws):
+    mock_worksheet = MagicMock()
+    mock_worksheet.get_all_values.return_value = [
+        ["Repo URL", "Repo 名稱", "官方說明", "README 中文摘要", "使用情境", "星數/語言", "日期"],
+        ["https://github.com/psf/requests", "psf/requests", "", "", "", "", ""],
+    ]
+    mock_ws.return_value = mock_worksheet
+    row_num = append_github_repo("https://github.com/fastapi/fastapi")
+    assert row_num == 3
+    mock_worksheet.update_cell.assert_called_once_with(3, 1, "https://github.com/fastapi/fastapi")
+
+
+@patch("services.sheet.date")
+@patch("services.sheet.get_github_worksheet")
+def test_write_github_result_updates_all_columns(mock_ws, mock_date):
+    mock_date.today.return_value.isoformat.return_value = "2026-03-15"
+    mock_worksheet = MagicMock()
+    mock_ws.return_value = mock_worksheet
+    write_github_result(
+        2, "psf/requests", "HTTP for Humans",
+        "中文摘要", "• 情境一", "⭐ 52000 | Python",
+    )
+    assert mock_worksheet.update_cell.call_count == 6
+    mock_worksheet.update_cell.assert_any_call(2, 2, "psf/requests")
+    mock_worksheet.update_cell.assert_any_call(2, 6, "⭐ 52000 | Python")
+    mock_worksheet.update_cell.assert_any_call(2, 7, "2026-03-15")
+
+
+@patch("services.sheet.get_github_worksheet")
+def test_write_github_error_marks_b_column(mock_ws):
+    mock_worksheet = MagicMock()
+    mock_ws.return_value = mock_worksheet
+    write_github_error(2, "API 超時")
+    mock_worksheet.update_cell.assert_called_once_with(2, 2, "[ERROR] API 超時")

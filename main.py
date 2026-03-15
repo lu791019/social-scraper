@@ -6,17 +6,24 @@ from config import DAILY_LIMIT, REQUEST_DELAY_MIN, REQUEST_DELAY_MAX
 from scraper.browser import create_browser
 from scraper.instagram import scrape_instagram
 from scraper.threads import scrape_threads
+from scraper.github import fetch_repo
 from media.ocr import process_images
 from media.transcriber import process_video
-from services.sheet import get_pending_rows, write_result, write_error
+from services.sheet import (
+    get_pending_rows, write_result, write_error,
+    get_github_pending_rows, write_github_result, write_github_error,
+)
 from services.summarizer import summarize_and_extract, format_raw_content
+from services.github_summarizer import summarize_readme
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def detect_platform(url: str) -> str:
-    if "instagram.com" in url:
+    if "github.com" in url:
+        return "github"
+    elif "instagram.com" in url:
         return "instagram"
     elif "threads.net" in url or "threads.com" in url:
         return "threads"
@@ -52,7 +59,34 @@ async def process_post(context, url: str) -> tuple[str, str]:
     return summary, key_points
 
 
+async def process_github_repos() -> None:
+    """批次處理 GitHub 工作表中待處理的 repo"""
+    pending = get_github_pending_rows()
+    if not pending:
+        logger.info("GitHub：沒有待處理的 URL")
+        return
+
+    pending = pending[:DAILY_LIMIT]
+    logger.info(f"GitHub：待處理 {len(pending)} 筆")
+
+    for row_num, url in pending:
+        logger.info(f"GitHub 處理第 {row_num} 列: {url}")
+        try:
+            repo = await fetch_repo(url)
+            summary, use_cases = await summarize_readme(repo)
+            stars_lang = f"⭐ {repo.stars} | {repo.language}" if repo.language else f"⭐ {repo.stars}"
+            write_github_result(row_num, repo.full_name, repo.description, summary, use_cases, stars_lang)
+            logger.info(f"GitHub 第 {row_num} 列完成")
+        except Exception as e:
+            logger.error(f"GitHub 第 {row_num} 列失敗: {e}")
+            write_github_error(row_num, str(e))
+
+
 async def main():
+    # 處理 GitHub 工作表
+    await process_github_repos()
+
+    # 處理社群貼文工作表
     pending = get_pending_rows()
     if not pending:
         logger.info("沒有待處理的 URL")

@@ -17,8 +17,8 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
-from line_webhook.line_handler import extract_urls
-from services.sheet import append_url
+from line_webhook.line_handler import extract_urls, extract_github_urls
+from services.sheet import append_url, append_github_repo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -98,25 +98,55 @@ async def callback(request: Request):
     return "OK"
 
 
+async def run_github_scraper(user_id: str, url: str, row_num: int) -> None:
+    """背景執行 GitHub scraper：API 取得 → 摘要 → 寫回 Sheet → 推播"""
+    try:
+        from scraper.github import fetch_repo
+        from services.github_summarizer import summarize_readme
+        from services.sheet import write_github_result, write_github_error
+
+        repo = await fetch_repo(url)
+        summary, use_cases = await summarize_readme(repo)
+        stars_lang = f"⭐ {repo.stars} | {repo.language}" if repo.language else f"⭐ {repo.stars}"
+        write_github_result(row_num, repo.full_name, repo.description, summary, use_cases, stars_lang)
+        push_text(user_id, f"GitHub 處理完成！\n\n📦 {repo.full_name}\n📝 {summary[:200]}")
+    except Exception as e:
+        logger.error(f"GitHub scraper 失敗 (row {row_num}): {e}")
+        try:
+            from services.sheet import write_github_error
+            write_github_error(row_num, str(e))
+        except Exception:
+            pass
+        push_text(user_id, f"GitHub 處理失敗：{e}")
+
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event: MessageEvent):
     try:
         text = event.message.text
         logger.info(f"收到訊息: {text}")
+
+        github_urls = extract_github_urls(text)
         urls = extract_urls(text)
 
-        if not urls:
-            reply_text(event.reply_token, "請傳送 Instagram 或 Threads 的貼文連結。")
+        if not urls and not github_urls:
+            reply_text(event.reply_token, "請傳送 Instagram、Threads 或 GitHub 的連結。")
             return
 
         results = []
+        user_id = event.source.user_id
+
+        for url in github_urls:
+            row_num = append_github_repo(url)
+            results.append(f"📦 {url}\n   → GitHub 工作表第 {row_num} 列")
+            logger.info(f"GitHub URL 寫入 Sheet 第 {row_num} 列: {url}")
+            if _loop:
+                _loop.create_task(run_github_scraper(user_id, url, row_num))
+
         for url in urls:
             row_num = append_url(url)
             results.append(f"✅ {url}\n   → 第 {row_num} 列")
             logger.info(f"URL 寫入 Sheet 第 {row_num} 列: {url}")
-
-            # 背景觸發 scraper
-            user_id = event.source.user_id
             if _loop:
                 _loop.create_task(run_scraper_for_url(user_id, url, row_num))
 

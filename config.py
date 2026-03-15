@@ -30,5 +30,8 @@ PROXY_URL: str | None = os.environ.get("PROXY_URL")
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 
+# GitHub (optional, unauthenticated = 60 req/hr)
+GITHUB_TOKEN: str | None = os.environ.get("GITHUB_TOKEN")
+
 # Temp directory for video downloads
 TEMP_DIR = Path("/tmp/social-scraper")
