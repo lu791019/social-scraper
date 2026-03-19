@@ -1,19 +1,21 @@
 # Social Scraper
 
-從 LINE 傳送 IG/Threads 貼文連結，自動爬取內容（文字 + 圖片 OCR + 影片逐字稿），用 Claude 產摘要與關鍵點，寫回 Google Sheet。**零 API 成本**。
+從 LINE 傳送連結，自動爬取內容並用 Claude 產摘要，寫回 Google Sheet。**零 API 成本**。
+
+支援平台：
+- **Instagram / Threads** — 貼文文字 + 圖片 OCR + 影片逐字稿 → 摘要 + 關鍵點
+- **GitHub** — Repo 資訊 + README 中文翻譯/摘要 + 使用情境
 
 ## 架構流程
 
 ```
-LINE 傳連結 → Bot 回覆「已收到」→ 寫入 Google Sheet
-                                        ↓ (背景)
-                              Patchright 爬取貼文
-                                        ↓
-                         圖片 OCR / 影片逐字稿 / 文字擷取
-                                        ↓
-                           claude --print 摘要 + 關鍵點
-                                        ↓
-                              寫回 Sheet → LINE 推播結果
+LINE 傳連結
+  ├── IG/Threads URL → Patchright 爬取 → OCR/STT → 摘要 → Sheet1
+  └── GitHub URL → REST API → README 摘要 → "GitHub" worksheet
+                                    ↓
+                           claude --print（走 Max 額度）
+                                    ↓
+                          寫回 Sheet → LINE 推播結果
 ```
 
 ## 前置需求
@@ -35,20 +37,19 @@ cd social-scraper
 # 2. 安裝 Python 依賴
 uv sync
 
-# 3. 安裝 Patchright 瀏覽器
+# 3. 安裝 Patchright 瀏覽器（IG/Threads 用，GitHub 不需要）
 uv run patchright install chromium
 
 # 4. 設定環境變數
 cp .env.example .env
-# 編輯 .env，填入以下值：
+# 編輯 .env，填入：
 #   GOOGLE_SHEET_URL=你的 Google Sheet URL
 #   LINE_CHANNEL_SECRET=你的 LINE Channel Secret
 #   LINE_CHANNEL_ACCESS_TOKEN=你的 LINE Channel Access Token
+#   GITHUB_TOKEN=（可選，提升 API 限額）
 
 # 5. 放入 Google Cloud credentials
 # 將 Service Account JSON 金鑰存為 credentials.json（根目錄）
-
-# 6. mlx-whisper 模型（首次執行時自動下載 ~1.5GB）
 ```
 
 ### Google Cloud 設定
@@ -68,7 +69,7 @@ cp .env.example .env
 ### 方式一：LINE Bot（推薦）
 
 ```bash
-# 1. 先關閉 Chrome（Patchright 限制）
+# 1. 先關閉 Chrome（Patchright 限制，僅 IG/Threads 需要）
 pkill -f "Google Chrome"
 
 # 2. 啟動 webhook server
@@ -82,7 +83,9 @@ ngrok http 8000
 #    到 LINE Developers Console → Messaging API → Webhook URL → Update
 #    開啟 Use webhook
 
-# 5. 在 LINE 傳 IG/Threads 連結給 Bot
+# 5. 在 LINE 傳連結給 Bot
+#    - IG/Threads 連結 → 寫入 Sheet1
+#    - GitHub repo 連結 → 寫入 GitHub 工作表
 ```
 
 > **注意：** ngrok 每次重啟會換 URL，需要重新到 LINE Developers Console 更新 Webhook URL。
@@ -90,60 +93,80 @@ ngrok http 8000
 ### 方式二：手動批次處理
 
 ```bash
-# 先在 Google Sheet A 欄手動貼入 URL，然後：
+# 先在 Google Sheet 手動貼入 URL：
+#   - IG/Threads URL → Sheet1 A 欄
+#   - GitHub URL → GitHub 工作表 A 欄
+# 然後：
 pkill -f "Google Chrome"
 uv run python main.py
 ```
+
+## Google Sheet 欄位
+
+### Sheet1（IG/Threads）
+
+| 欄 | 內容 |
+|----|------|
+| A | 社群連結 |
+| B | AI 摘要（2-3 句） |
+| C | 關鍵點（3~5 個 bullet） |
+| D | 執行日期 |
+
+### GitHub 工作表（自動建立）
+
+| 欄 | 內容 |
+|----|------|
+| A | Repo URL |
+| B | Repo 名稱（owner/repo） |
+| C | 官方說明 |
+| D | README 中文摘要（5~10 句） |
+| E | 使用情境（3~5 個 bullet） |
+| F | 星數/語言 |
+| G | 日期 |
 
 ## 專案結構
 
 ```
 social-scraper/
-├── main.py                # 批次主控流程
-├── config.py              # 設定（環境變數、常數）
+├── main.py                      # 批次主控流程（IG/Threads + GitHub）
+├── config.py                    # 設定（環境變數、常數）
 ├── line_webhook/
-│   ├── app.py             # FastAPI webhook server（LINE Bot）
-│   └── line_handler.py    # URL 提取、平台驗證
+│   ├── app.py                   # FastAPI webhook server（LINE Bot）
+│   └── line_handler.py          # URL 提取、平台驗證（IG/Threads/GitHub）
 ├── scraper/
-│   ├── browser.py         # Patchright 瀏覽器管理 + 防封
-│   ├── instagram.py       # IG 貼文解析（嵌入 JSON 遞迴搜尋）
-│   └── threads.py         # Threads 貼文解析
+│   ├── browser.py               # Patchright 瀏覽器管理 + 防封
+│   ├── instagram.py             # IG 貼文解析
+│   ├── threads.py               # Threads 貼文解析
+│   └── github.py                # GitHub repo 資訊 + README 取得
 ├── media/
-│   ├── ocr.py             # 圖片 OCR（claude --print）
-│   └── transcriber.py     # 影片 → ffmpeg → mlx-whisper 逐字稿
+│   ├── ocr.py                   # 圖片 OCR（claude --print）
+│   └── transcriber.py           # 影片 → ffmpeg → mlx-whisper
 ├── services/
-│   ├── sheet.py           # Google Sheet 讀寫（gspread）
-│   └── summarizer.py      # Claude 摘要 + 關鍵點（單次呼叫）
-├── tests/                 # 49 個單元測試 + 整合測試
-├── .env.example           # 環境變數範例
-├── credentials.json       # Google Service Account 金鑰（不進版控）
-└── pyproject.toml         # 依賴管理（uv）
+│   ├── sheet.py                 # Google Sheet 讀寫（Sheet1 + GitHub）
+│   ├── summarizer.py            # IG/Threads 摘要 + 關鍵點
+│   └── github_summarizer.py     # GitHub README 中文摘要 + 使用情境
+├── tests/                       # 72 個單元測試 + 整合測試
+├── .env.example                 # 環境變數範例
+├── credentials.json             # Google Service Account 金鑰（不進版控）
+└── pyproject.toml               # 依賴管理（uv）
 ```
 
 ## 技術棧
 
 | 元件 | 技術 | 成本 |
 |------|------|------|
-| 爬蟲 | Patchright (Playwright fork) | 免費 |
+| IG/Threads 爬蟲 | Patchright (Playwright fork) | 免費 |
+| GitHub 爬取 | httpx + GitHub REST API | 免費 |
 | OCR + 摘要 | `claude --print` (Max 額度) | 零 API 費 |
 | 語音轉文字 | mlx-whisper (Apple Silicon) | 零 API 費 |
 | LINE Bot | FastAPI + line-bot-sdk | 免費 |
 | Sheet 存取 | gspread + Service Account | 免費 |
 | 音軌擷取 | ffmpeg | 免費 |
 
-## Google Sheet 欄位
-
-| 欄 | 內容 |
-|----|------|
-| A | 社群連結（手動貼或 LINE Bot 自動寫入） |
-| B | AI 摘要（2-3 句） |
-| C | 關鍵點（3~5 個 bullet） |
-| D | 執行日期 |
-
 ## 測試
 
 ```bash
-# 單元測試（49 個）
+# 單元測試（72 個）
 uv run pytest tests/ -v --ignore=tests/test_integration.py
 
 # 整合測試（需關閉 Chrome + 真實 Sheet + Claude Max）
@@ -152,7 +175,8 @@ uv run pytest tests/test_integration.py -v -m integration -s
 
 ## 注意事項
 
-- **Patchright 不能與 Chrome 共存**：執行前必須關閉所有 Chrome
+- **Patchright 不能與 Chrome 共存**：執行 IG/Threads 爬取前必須關閉所有 Chrome（GitHub 不受此限）
 - **每日上限 30 篇**：`config.py` 的 `DAILY_LIMIT`
 - **mlx-whisper 首次下載**：第一次執行自動下載模型 ~1.5GB
 - **ngrok URL 會變**：每次重啟 ngrok 需更新 LINE Webhook URL
+- **GitHub API 限額**：未設 token 為 60 req/hr，設了為 5000 req/hr
