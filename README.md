@@ -173,6 +173,12 @@ uv run pytest tests/ -v --ignore=tests/test_integration.py
 uv run pytest tests/test_integration.py -v -m integration -s
 ```
 
+## 佇列機制與進度查詢
+
+- **併發限制**：同時最多處理 2 筆任務，其餘自動排隊
+- **即時進度**：每筆任務開始處理、完成或失敗時，LINE 會主動推播狀態
+- **主動查詢**：在 LINE 輸入「進度」、「狀態」或「status」即可查看目前佇列
+
 ## 注意事項
 
 - **Patchright 不能與 Chrome 共存**：執行 IG/Threads 爬取前必須關閉所有 Chrome（GitHub 不受此限）
