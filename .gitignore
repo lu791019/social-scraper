@@ -13,9 +13,21 @@ venv/
 *.db
 *.sqlite
 
+# Credentials
+credentials.json
+
+# Temp
+/tmp/
+
 # OS
 .DS_Store
 
 # IDE
 .vscode/
 .idea/
+
+# Firecrawl cache
+.firecrawl/
+
+# Claude
+.claude/
