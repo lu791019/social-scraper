@@ -8,6 +8,9 @@ from html import unescape
 from typing import Optional
 from urllib.parse import urlparse, urlencode, parse_qs
 
+import httpx
+from readability import Document
+
 logger = logging.getLogger(__name__)
 
 # 要移除的 tracking query params
@@ -100,6 +103,46 @@ def _find_all_meta(html: str, prop: str) -> list[str]:
         pattern2 = rf'<meta\s+content="(.*?)"\s+(?:property|name)="{re.escape(prop)}"'
         results = [unescape(m) for m in re.findall(pattern2, html)]
     return results
+
+
+def extract_content(html: str) -> str:
+    """用 readability 提取正文，回傳純文字"""
+    doc = Document(html)
+    content_html = doc.summary()
+    # Strip HTML tags
+    text = re.sub(r"<[^>]+>", "", content_html)
+    text = unescape(text)
+    text = re.sub(r"\n\s*\n", "\n\n", text).strip()
+    return text
+
+
+async def scrape_article(url: str) -> ArticleData:
+    """擷取網頁全文與 metadata，回傳 ArticleData"""
+    cleaned_url = clean_url(url)
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=15.0,
+        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+    ) as client:
+        resp = await client.get(cleaned_url)
+        resp.raise_for_status()
+
+    html = resp.text
+    meta = extract_metadata(html)
+    content = extract_content(html)
+    parsed = urlparse(cleaned_url)
+    netloc = parsed.netloc
+    source = netloc[4:] if netloc.startswith("www.") else netloc
+
+    return ArticleData(
+        title=meta["title"],
+        url=cleaned_url,
+        source=source,
+        published_date=meta["published_date"],
+        tags=meta["tags"],
+        description=meta["description"],
+        content=content,
+    )
 
 
 def _parse_date(raw: str) -> str | None:

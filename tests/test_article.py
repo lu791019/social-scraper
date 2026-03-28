@@ -1,4 +1,4 @@
-from scraper.article import clean_url, extract_metadata
+from scraper.article import clean_url, extract_metadata, extract_content
 
 
 def test_clean_url_removes_utm_params():
@@ -74,3 +74,70 @@ def test_parse_date_short_string():
     assert _parse_date("2026-03-20T11:30:00") == "2026-03-20"
     assert _parse_date("2026-03") is None
     assert _parse_date("invalid") is None
+
+
+ARTICLE_HTML = """
+<html><head><title>Test</title></head>
+<body>
+<nav>Navigation bar</nav>
+<article>
+<p>First paragraph of the article.</p>
+<p>Second paragraph with important info.</p>
+</article>
+<footer>Footer stuff</footer>
+</body></html>
+"""
+
+
+def test_extract_content_strips_nav_footer():
+    content = extract_content(ARTICLE_HTML)
+    assert "First paragraph" in content
+    assert "Second paragraph" in content
+    assert len(content) > 10
+
+
+def test_extract_content_returns_plain_text():
+    content = extract_content(ARTICLE_HTML)
+    assert "<p>" not in content
+    assert "<article>" not in content
+
+
+FULL_HTML = """
+<html><head>
+<meta property="og:title" content="Great Article">
+<meta property="og:description" content="A summary">
+<meta property="article:published_time" content="2026-03-20T11:30:00+08:00">
+</head><body>
+<article><p>This is the main article content.</p><p>Another paragraph.</p></article>
+</body></html>
+"""
+
+
+import pytest
+from unittest.mock import AsyncMock, patch
+
+
+@pytest.mark.asyncio
+async def test_scrape_article_returns_article_data():
+    from scraper.article import scrape_article, ArticleData
+
+    mock_response = AsyncMock()
+    mock_response.text = FULL_HTML
+    mock_response.status_code = 200
+    mock_response.raise_for_status = lambda: None
+
+    with patch("scraper.article.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value = mock_client
+
+        article = await scrape_article("https://example.com/article?utm_source=test")
+
+    assert isinstance(article, ArticleData)
+    assert article.title == "Great Article"
+    assert article.url == "https://example.com/article"
+    assert article.source == "example.com"
+    assert article.published_date == "2026-03-20"
+    assert "main article content" in article.content
