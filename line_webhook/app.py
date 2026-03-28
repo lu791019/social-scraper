@@ -17,7 +17,7 @@ from linebot.v3.messaging import (
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
-from line_webhook.line_handler import extract_urls, extract_github_urls
+from line_webhook.line_handler import extract_urls, extract_github_urls, extract_general_urls
 from services.sheet import append_url, append_github_repo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -150,6 +150,34 @@ async def run_github_scraper(user_id: str, url: str, row_num: int) -> None:
             push_text(user_id, f"❌ GitHub 第 {row_num} 列失敗：{e}\n\n（{queue_status_text()}）")
 
 
+async def run_article_scraper(user_id: str, url: str) -> None:
+    """背景執行 article scraper：擷取全文 → 存 Notion → 推播結果"""
+    global _running, _waiting
+    _waiting += 1
+    async with _semaphore:
+        _waiting -= 1
+        _running += 1
+        push_text(user_id, f"▶ 開始擷取文章\n（{queue_status_text()}）")
+        try:
+            from scraper.article import scrape_article
+            from services.notion import create_article_page
+
+            article = await scrape_article(url)
+            page_url = create_article_page(article)
+            _running -= 1
+            push_text(
+                user_id,
+                f"✅ 已存入 Notion：{article.title}\n👉 {page_url}\n\n（{queue_status_text()}）",
+            )
+        except Exception as e:
+            _running -= 1
+            logger.error(f"Article scraper 失敗: {e}")
+            push_text(
+                user_id,
+                f"❌ 無法擷取該網頁內容：{e}\n\n（{queue_status_text()}）",
+            )
+
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event: MessageEvent):
     try:
@@ -158,13 +186,14 @@ def handle_message(event: MessageEvent):
 
         github_urls = extract_github_urls(text)
         urls = extract_urls(text)
+        general_urls = extract_general_urls(text)
 
         if text.strip() in ("進度", "狀態", "status"):
             reply_text(event.reply_token, f"📊 目前佇列狀態\n{queue_status_text()}")
             return
 
-        if not urls and not github_urls:
-            reply_text(event.reply_token, "請傳送 Instagram、Threads 或 GitHub 的連結。")
+        if not urls and not github_urls and not general_urls:
+            reply_text(event.reply_token, "請傳送 Instagram、Threads、GitHub 或網頁連結。")
             return
 
         results = []
@@ -184,8 +213,14 @@ def handle_message(event: MessageEvent):
             if _loop:
                 _loop.create_task(run_scraper_for_url(user_id, url, row_num))
 
-        new_count = len(github_urls) + len(urls)
-        reply_msg = f"已收到 {new_count} 筆，排入佇列\n（{queue_status_text()}）\n\n" + "\n".join(results)
+        for url in general_urls:
+            results.append(f"📄 {url}\n   → 擷取全文存 Notion")
+            logger.info(f"Article URL 排入佇列: {url}")
+            if _loop:
+                _loop.create_task(run_article_scraper(user_id, url))
+
+        total = len(github_urls) + len(urls) + len(general_urls)
+        reply_msg = f"已收到 {total} 筆，排入佇列\n（{queue_status_text()}）\n\n" + "\n".join(results)
         reply_text(event.reply_token, reply_msg)
     except Exception as e:
         logger.error(f"handle_message 錯誤: {traceback.format_exc()}")
