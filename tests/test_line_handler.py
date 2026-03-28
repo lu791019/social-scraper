@@ -83,3 +83,49 @@ def test_is_github_url():
     assert is_github_url("https://github.com/langchain-ai/langchain")
     assert not is_github_url("https://gitlab.com/user/repo")
     assert not is_github_url("https://instagram.com/p/abc")
+
+
+from line_webhook.line_handler import extract_general_urls
+
+
+def test_extract_general_urls_article():
+    text = "看看這個 https://www.bnext.com.tw/article/90356/ai-agent-skill 很讚"
+    urls = extract_general_urls(text)
+    assert len(urls) == 1
+    assert "bnext.com.tw" in urls[0]
+
+
+def test_extract_general_urls_ignores_ig():
+    text = "https://www.instagram.com/p/abc123/"
+    urls = extract_general_urls(text)
+    assert len(urls) == 0
+
+
+def test_extract_general_urls_ignores_threads():
+    text = "https://www.threads.net/@user/post/abc123"
+    urls = extract_general_urls(text)
+    assert len(urls) == 0
+
+
+def test_extract_general_urls_ignores_github():
+    text = "https://github.com/psf/requests"
+    urls = extract_general_urls(text)
+    assert len(urls) == 0
+
+
+def test_extract_general_urls_mixed():
+    text = (
+        "https://www.bnext.com.tw/article/123 "
+        "https://www.instagram.com/p/abc/ "
+        "https://medium.com/@user/some-post-abc123"
+    )
+    urls = extract_general_urls(text)
+    assert len(urls) == 2
+    assert any("bnext" in u for u in urls)
+    assert any("medium" in u for u in urls)
+
+
+def test_extract_general_urls_no_match():
+    text = "今天天氣很好"
+    urls = extract_general_urls(text)
+    assert len(urls) == 0
