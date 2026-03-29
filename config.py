@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -35,3 +37,7 @@ GITHUB_TOKEN: str | None = os.environ.get("GITHUB_TOKEN")
 
 # Temp directory for video downloads
 TEMP_DIR = Path("/tmp/social-scraper")
+
+# Notion
+NOTION_TOKEN: str = os.environ.get("NOTION_TOKEN", "")
+NOTION_DATABASE_ID: str = os.environ.get("NOTION_DATABASE_ID", "")

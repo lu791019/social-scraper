@@ -5,17 +5,19 @@
 支援平台：
 - **Instagram / Threads** — 貼文文字 + 圖片 OCR + 影片逐字稿 → 摘要 + 關鍵點
 - **GitHub** — Repo 資訊 + README 中文翻譯/摘要 + 使用情境
+- **一般網頁** — 全文擷取 → Markdown 結構化排版存入 Notion Database（標題/清單/引用/連結）
 
 ## 架構流程
 
 ```
 LINE 傳連結
   ├── IG/Threads URL → Patchright 爬取 → OCR/STT → 摘要 → Sheet1
-  └── GitHub URL → REST API → README 摘要 → "GitHub" worksheet
+  ├── GitHub URL → REST API → README 摘要 → "GitHub" worksheet
+  └── 其他 URL → httpx + readability → 全文擷取 → Notion Database
                                     ↓
                            claude --print（走 Max 額度）
                                     ↓
-                          寫回 Sheet → LINE 推播結果
+                          寫回 Sheet / Notion → LINE 推播結果
 ```
 
 ## 前置需求
@@ -47,6 +49,8 @@ cp .env.example .env
 #   LINE_CHANNEL_SECRET=你的 LINE Channel Secret
 #   LINE_CHANNEL_ACCESS_TOKEN=你的 LINE Channel Access Token
 #   GITHUB_TOKEN=（可選，提升 API 限額）
+#   NOTION_TOKEN=你的 Notion Integration Token
+#   NOTION_DATABASE_ID=你的 Notion Database ID
 
 # 5. 放入 Google Cloud credentials
 # 將 Service Account JSON 金鑰存為 credentials.json（根目錄）
@@ -86,6 +90,7 @@ ngrok http 8000
 # 5. 在 LINE 傳連結給 Bot
 #    - IG/Threads 連結 → 寫入 Sheet1
 #    - GitHub repo 連結 → 寫入 GitHub 工作表
+#    - 其他網頁連結 → 全文存入 Notion
 ```
 
 > **注意：** ngrok 每次重啟會換 URL，需要重新到 LINE Developers Console 更新 Webhook URL。
@@ -132,20 +137,22 @@ social-scraper/
 ├── config.py                    # 設定（環境變數、常數）
 ├── line_webhook/
 │   ├── app.py                   # FastAPI webhook server（LINE Bot）
-│   └── line_handler.py          # URL 提取、平台驗證（IG/Threads/GitHub）
+│   └── line_handler.py          # URL 提取、平台驗證
 ├── scraper/
 │   ├── browser.py               # Patchright 瀏覽器管理 + 防封
 │   ├── instagram.py             # IG 貼文解析
 │   ├── threads.py               # Threads 貼文解析
-│   └── github.py                # GitHub repo 資訊 + README 取得
+│   ├── github.py                # GitHub repo 資訊 + README 取得
+│   └── article.py               # 一般網頁全文擷取（httpx + readability）
 ├── media/
 │   ├── ocr.py                   # 圖片 OCR（claude --print）
 │   └── transcriber.py           # 影片 → ffmpeg → mlx-whisper
 ├── services/
 │   ├── sheet.py                 # Google Sheet 讀寫（Sheet1 + GitHub）
 │   ├── summarizer.py            # IG/Threads 摘要 + 關鍵點
-│   └── github_summarizer.py     # GitHub README 中文摘要 + 使用情境
-├── tests/                       # 72 個單元測試 + 整合測試
+│   ├── github_summarizer.py     # GitHub README 中文摘要 + 使用情境
+│   └── notion.py                # Notion Database 寫入（全文存檔）
+├── tests/                       # 單元測試 + 整合測試
 ├── .env.example                 # 環境變數範例
 ├── credentials.json             # Google Service Account 金鑰（不進版控）
 └── pyproject.toml               # 依賴管理（uv）
@@ -157,6 +164,8 @@ social-scraper/
 |------|------|------|
 | IG/Threads 爬蟲 | Patchright (Playwright fork) | 免費 |
 | GitHub 爬取 | httpx + GitHub REST API | 免費 |
+| 網頁全文擷取 | httpx + readability-lxml + markdownify | 免費 |
+| Notion 存檔 | notion-client SDK（Markdown → Notion blocks） | 免費 |
 | OCR + 摘要 | `claude --print` (Max 額度) | 零 API 費 |
 | 語音轉文字 | mlx-whisper (Apple Silicon) | 零 API 費 |
 | LINE Bot | FastAPI + line-bot-sdk | 免費 |
@@ -166,7 +175,7 @@ social-scraper/
 ## 測試
 
 ```bash
-# 單元測試（72 個）
+# 單元測試（99 個）
 uv run pytest tests/ -v --ignore=tests/test_integration.py
 
 # 整合測試（需關閉 Chrome + 真實 Sheet + Claude Max）

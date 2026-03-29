@@ -42,6 +42,10 @@ LINE_CHANNEL_ACCESS_TOKEN=你的_token
 # 提升 GitHub API 限額（60 → 5000 req/hr）
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 
+# Notion Integration（網頁全文存 Notion 用）
+NOTION_TOKEN=ntn_xxxxxxxxxxxxxxxxxxxx
+NOTION_DATABASE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
 # Claude CLI 路徑（預設 "claude"）
 CLAUDE_CLI=/usr/local/bin/claude
 
@@ -86,8 +90,9 @@ ngrok http 8000
 | `https://www.instagram.com/p/xxx/` | Patchright 爬取 + OCR + 摘要 | Sheet1 |
 | `https://www.threads.net/@user/post/xxx` | Patchright 爬取 + OCR + 摘要 | Sheet1 |
 | `https://github.com/owner/repo` | GitHub API + README 摘要 | GitHub 工作表 |
+| 其他網頁 URL（如 bnext.com.tw） | httpx + readability 全文擷取 | Notion Database |
 
-Bot 會先立即回覆「已收到，處理中...」，背景處理完成後再推播結果。
+Bot 會先立即回覆「已收到，排入佇列」，背景處理完成後再推播結果（含 Notion 頁面連結）。
 
 ### 停止 server
 
@@ -175,6 +180,30 @@ kill <PID>
 
 ---
 
+## Notion 設定（網頁全文存檔用）
+
+### 首次設定
+
+1. 到 [Notion Integrations](https://www.notion.so/my-integrations) 建立 Internal Integration → 取得 token
+2. 在 Notion 建立一個頁面，將 Integration 加入該頁面的 Connections
+3. 透過 API 或手動建立 Database，欄位：Title / URL / Source / Published / Tags / Saved
+4. 將 token 和 database ID 填入 `.env`
+
+### Notion Database 欄位
+
+| 欄位 | 類型 | 內容 |
+|------|------|------|
+| Title | Title | 文章標題 |
+| URL | URL | 原始連結（已清除追蹤參數） |
+| Source | Select | 來源網站（如 bnext.com.tw） |
+| Published | Date | 文章發布日期 |
+| Tags | Multi-select | 文章標籤 |
+| Saved | Date | 擷取日期 |
+
+頁面內容為純文章正文。
+
+---
+
 ## 常見問題排除
 
 ### Bot 沒反應
@@ -243,15 +272,17 @@ social-scraper/
 │   ├── browser.py               # Patchright 瀏覽器管理
 │   ├── instagram.py             # IG 貼文解析
 │   ├── threads.py               # Threads 貼文解析
-│   └── github.py                # GitHub REST API 爬取
+│   ├── github.py                # GitHub REST API 爬取
+│   └── article.py               # 一般網頁全文擷取
 ├── media/
 │   ├── ocr.py                   # 圖片 OCR + run_claude_print()
 │   └── transcriber.py           # 影片 → mlx-whisper
 ├── services/
 │   ├── sheet.py                 # Google Sheet（Sheet1 + GitHub）
 │   ├── summarizer.py            # IG/Threads 摘要
-│   └── github_summarizer.py     # GitHub README 摘要
-└── tests/                       # 72 個單元測試
+│   ├── github_summarizer.py     # GitHub README 摘要
+│   └── notion.py                # Notion Database 寫入
+└── tests/                       # 單元測試
 ```
 
 ### 相關文件

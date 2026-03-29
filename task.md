@@ -39,15 +39,31 @@
 - [x] Task 11: 合併 summarize + key_points 為單次呼叫 → `88235ef`
 - [x] Task 12: 批次 OCR（多張圖合併一次 claude --print） → `88235ef`
 
-## Section G: LINE Bot 整合
-- [ ] Task 13: LINE Bot 前置設定（LINE Developers Console、環境變數）
-- [ ] Task 14: LINE webhook server（FastAPI + line-bot-sdk）
-- [ ] Task 15: 訊息處理邏輯（URL 提取、平台驗證、寫入 Sheet）
-- [ ] Task 16: 單元測試 + 手動驗證
+## Section G: LINE Bot 整合 (完成)
+- [x] Task 13: LINE Bot 前置設定（LINE Developers Console、環境變數）
+- [x] Task 14: LINE webhook server（FastAPI + line-bot-sdk）
+- [x] Task 15: 訊息處理邏輯（URL 提取、平台驗證、寫入 Sheet）
+- [x] Task 16: 單元測試 + 手動驗證
+
+## Section H: GitHub 爬取 (完成)
+- [x] Task 17: GitHub repo 爬取寫入 Google Sheet
+
+## Section I: 任務佇列 (完成)
+- [x] Task 18: Semaphore 佇列機制 + LINE 進度查詢
+
+## Section J: 網頁全文擷取 → Notion (完成)
+- [x] Task 19: 新增 readability-lxml + notion-client 依賴 → `8ed956f`
+- [x] Task 20: config.py 新增 Notion 環境變數 → `266e064`
+- [x] Task 21: scraper/article.py URL 清理 + metadata 提取 → `87c67a5`
+- [x] Task 22: scraper/article.py 全文擷取 scrape_article → `70b5649`
+- [x] Task 23: services/notion.py Notion 寫入 → `3e3d304`
+- [x] Task 24: line_handler.py 新增 extract_general_urls → `7f31fc6`
+- [x] Task 25: app.py 整合 article-to-Notion 流程 → `ba18154`
+- [x] Task 26: 端對端整合測試（bnext → Notion）通過
 
 ## Notes
 - 零 API 成本方案：`claude --print`（走 Max 額度）+ `mlx-whisper`（本地 M1 加速）
 - Task 3、4 spike 發現 IG/Threads 新版 JSON 結構（2025+），parser 已適配
 - 共用 `PostData` dataclass 和 `_extract_image`/`_extract_video` helpers（DRY）
-- 40 個單元測試全部通過
+- 38 個新增單元測試（article + notion + line_handler）全部通過
 - 整合測試需要：關閉 Chrome、真實 Sheet、claude CLI Max 訂閱
