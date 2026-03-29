@@ -106,14 +106,15 @@ def _find_all_meta(html: str, prop: str) -> list[str]:
 
 
 def extract_content(html: str) -> str:
-    """用 readability 提取正文，回傳純文字"""
+    """用 readability 提取正文，回傳 Markdown"""
+    from markdownify import markdownify as md
+
     doc = Document(html)
     content_html = doc.summary()
-    # Strip HTML tags
-    text = re.sub(r"<[^>]+>", "", content_html)
-    text = unescape(text)
-    text = re.sub(r"\n\s*\n", "\n\n", text).strip()
-    return text
+    markdown = md(content_html, heading_style="ATX", strip=["script", "style"])
+    # 清理多餘空行
+    markdown = re.sub(r"\n{3,}", "\n\n", markdown).strip()
+    return markdown
 
 
 async def scrape_article(url: str) -> ArticleData:
