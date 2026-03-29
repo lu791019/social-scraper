@@ -5,7 +5,7 @@
 支援平台：
 - **Instagram / Threads** — 貼文文字 + 圖片 OCR + 影片逐字稿 → 摘要 + 關鍵點
 - **GitHub** — Repo 資訊 + README 中文翻譯/摘要 + 使用情境
-- **一般網頁** — 全文擷取 → 存入 Notion Database（適合讀取慢的網站如數位時代）
+- **一般網頁** — 全文擷取 → Markdown 結構化排版存入 Notion Database（標題/清單/引用/連結）
 
 ## 架構流程
 
@@ -164,8 +164,8 @@ social-scraper/
 |------|------|------|
 | IG/Threads 爬蟲 | Patchright (Playwright fork) | 免費 |
 | GitHub 爬取 | httpx + GitHub REST API | 免費 |
-| 網頁全文擷取 | httpx + readability-lxml | 免費 |
-| Notion 存檔 | notion-client SDK | 免費 |
+| 網頁全文擷取 | httpx + readability-lxml + markdownify | 免費 |
+| Notion 存檔 | notion-client SDK（Markdown → Notion blocks） | 免費 |
 | OCR + 摘要 | `claude --print` (Max 額度) | 零 API 費 |
 | 語音轉文字 | mlx-whisper (Apple Silicon) | 零 API 費 |
 | LINE Bot | FastAPI + line-bot-sdk | 免費 |
@@ -175,7 +175,7 @@ social-scraper/
 ## 測試
 
 ```bash
-# 單元測試（72 個）
+# 單元測試（99 個）
 uv run pytest tests/ -v --ignore=tests/test_integration.py
 
 # 整合測試（需關閉 Chrome + 真實 Sheet + Claude Max）
