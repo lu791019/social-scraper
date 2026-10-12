@@ -38,6 +38,13 @@ GITHUB_TOKEN: str | None = os.environ.get("GITHUB_TOKEN")
 # Temp directory for video downloads
 TEMP_DIR = Path("/tmp/social-scraper")
 
+# Webhook server（8000 被其他專案佔用，預設 8010）
+WEBHOOK_PORT: int = int(os.environ.get("WEBHOOK_PORT", "8010"))
+
+# Discord 出口（IG/Threads 完成後以「蛇摸影評」發 embed；未設定則略過）
+DISCORD_WEBHOOK_URL: str = os.environ.get("DISCORD_WEBHOOK_URL", "")
+DISCORD_SNAKE_AVATAR: str = os.environ.get("DISCORD_SNAKE_AVATAR", "")
+
 # Notion
 NOTION_TOKEN: str = os.environ.get("NOTION_TOKEN", "")
 NOTION_DATABASE_ID: str = os.environ.get("NOTION_DATABASE_ID", "")

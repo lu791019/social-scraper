@@ -85,22 +85,32 @@ async def run_scraper_for_url(user_id: str, url: str, row_num: int) -> None:
         _running += 1
         push_text(user_id, f"▶ 開始處理第 {row_num} 列\n（{queue_status_text()}）")
         try:
-            from scraper.browser import create_browser
-            from main import process_post
+            from scraper.browser import create_browser, close_browser
+            from main import process_post_detailed, to_discord_post
             from services.sheet import write_result
+            from services.discord_sink import send_post_to_discord
 
             browser, context = await create_browser()
             try:
-                summary, key_points = await process_post(context, url)
-                write_result(row_num, summary, key_points)
-                _running -= 1
-                push_text(user_id, f"✅ 第 {row_num} 列完成！\n\n📝 摘要：{summary[:200]}\n\n（{queue_status_text()}）")
+                result = await process_post_detailed(context, url)
             finally:
-                await browser.close()
+                await close_browser(browser)
+            summary = result.summary.summary
+            write_result(row_num, summary, result.summary.key_points)
+            # Discord 失敗只記 log，不影響 Sheet 與 LINE 回覆
+            discord_ok = await send_post_to_discord(to_discord_post(result))
+            discord_note = "" if discord_ok else "\n⚠️ Discord 未送出（見 logs）"
+            _running -= 1
+            push_text(user_id, f"✅ 第 {row_num} 列完成！\n\n📝 摘要：{summary[:200]}{discord_note}\n\n（{queue_status_text()}）")
         except Exception as e:
             _running -= 1
             logger.error(f"背景 scraper 失敗 (row {row_num}): {e}")
             push_text(user_id, f"❌ 第 {row_num} 列失敗：{e}\n\n（{queue_status_text()}）")
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "running": _running, "waiting": _waiting}
 
 
 @app.post("/callback")

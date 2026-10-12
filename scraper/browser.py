@@ -11,6 +11,9 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
 ]
 
+# browser → 啟動它的 Playwright driver，close_browser 時一起停掉
+_drivers: dict[int, object] = {}
+
 VIEWPORTS = [
     {"width": 1366, "height": 768},
     {"width": 1440, "height": 900},
@@ -52,4 +55,15 @@ async def create_browser(proxy: str | None = None) -> tuple[Browser, BrowserCont
         locale="zh-TW",
         timezone_id="Asia/Taipei",
     )
+    _drivers[id(browser)] = pw
     return browser, context
+
+
+async def close_browser(browser: Browser) -> None:
+    """關閉瀏覽器並停止 Patchright driver（只關 browser 會殘留 driver 行程）"""
+    pw = _drivers.pop(id(browser), None)
+    try:
+        await browser.close()
+    finally:
+        if pw is not None:
+            await pw.stop()

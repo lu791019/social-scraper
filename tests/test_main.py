@@ -19,3 +19,43 @@ def test_detect_platform_github():
 def test_detect_platform_unknown():
     with pytest.raises(ValueError, match="不支援的平台"):
         detect_platform("https://twitter.com/post/123")
+
+
+# ── process_post_detailed：一次處理，同時供 Sheet 與 Discord 使用 ──
+
+from unittest.mock import AsyncMock, patch  # noqa: E402
+
+from main import process_post, process_post_detailed, to_discord_post  # noqa: E402
+from scraper.instagram import PostData  # noqa: E402
+from services.summarizer import PostSummary  # noqa: E402
+
+_SUMMARY = PostSummary(summary="摘要", key_points="• 一", title="標題", discord_comment="嘶～")
+
+
+@pytest.mark.asyncio
+async def test_process_post_detailed_collects_metadata():
+    post = PostData(caption="文", image_urls=["https://img/1.jpg", "https://img/2.jpg"], author="zuck")
+    with patch("main.scrape_threads", AsyncMock(return_value=post)), \
+         patch("main.process_images", AsyncMock(return_value="圖字")), \
+         patch("main.summarize_post", AsyncMock(return_value=_SUMMARY)):
+        result = await process_post_detailed(None, "https://www.threads.com/@zuck/post/X")
+    assert result.platform == "threads"
+    assert result.author == "zuck"
+    assert result.first_image == "https://img/1.jpg"
+    assert result.summary is _SUMMARY
+
+
+@pytest.mark.asyncio
+async def test_process_post_keeps_tuple_interface():
+    post = PostData(caption="文")
+    with patch("main.scrape_instagram", AsyncMock(return_value=post)), \
+         patch("main.summarize_post", AsyncMock(return_value=_SUMMARY)):
+        assert await process_post(None, "https://www.instagram.com/p/X/") == ("摘要", "• 一")
+
+
+def test_to_discord_post_maps_fields():
+    from main import ProcessedPost
+    processed = ProcessedPost(url="u", platform="instagram", author="a", first_image=None, summary=_SUMMARY)
+    dp = to_discord_post(processed)
+    assert (dp.url, dp.platform, dp.author, dp.title, dp.summary, dp.key_points, dp.comment, dp.image_url) == \
+        ("u", "instagram", "a", "標題", "摘要", "• 一", "嘶～", None)

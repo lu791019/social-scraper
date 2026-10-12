@@ -14,6 +14,16 @@ class PostData:
     caption: str = ""
     image_urls: list[str] = field(default_factory=list)
     video_url: str | None = None
+    author: str = ""
+
+
+def extract_author(item: dict) -> str:
+    """從 item 的 user（或 owner）取 username，取不到回空字串。"""
+    for key in ("user", "owner"):
+        user = item.get(key)
+        if isinstance(user, dict) and user.get("username"):
+            return str(user["username"])
+    return ""
 
 
 def parse_ig_post(item: dict) -> PostData:
@@ -26,7 +36,7 @@ def parse_ig_post(item: dict) -> PostData:
     - carousel_media: [{image_versions2, video_versions, ...}, ...] (輪播才有)
     - media_type: 1=photo, 2=video, 8=carousel
     """
-    post = PostData()
+    post = PostData(author=extract_author(item))
 
     # Caption
     caption = item.get("caption")

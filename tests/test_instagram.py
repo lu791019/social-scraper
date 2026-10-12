@@ -64,3 +64,13 @@ def test_extract_post_from_json_unwraps_structure(ig_wrapped_json):
     assert result is not None
     assert len(result.caption) > 0
     assert len(result.image_urls) >= 1
+
+
+def test_parse_ig_post_extracts_author():
+    post = parse_ig_post({"caption": {"text": "hi"}, "user": {"username": "natgeo"}})
+    assert post.author == "natgeo"
+
+
+def test_parse_ig_post_falls_back_to_owner():
+    post = parse_ig_post({"caption": {"text": "hi"}, "owner": {"username": "nasa"}})
+    assert post.author == "nasa"

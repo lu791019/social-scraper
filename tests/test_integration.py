@@ -5,7 +5,7 @@
 """
 import pytest
 from main import process_post, detect_platform
-from scraper.browser import create_browser
+from scraper.browser import create_browser, close_browser
 
 
 @pytest.mark.integration
@@ -20,7 +20,7 @@ async def test_scrape_real_ig_post():
         # key_points 可能為空（若 LLM 格式不符），但 summary 必須有值
         print(f"\n--- Summary ---\n{summary}\n--- Key Points ---\n{key_points}")
     finally:
-        await browser.close()
+        await close_browser(browser)
 
 
 @pytest.mark.integration
@@ -34,4 +34,4 @@ async def test_scrape_real_threads_post():
         assert len(summary) > 0
         print(f"\n--- Summary ---\n{summary}\n--- Key Points ---\n{key_points}")
     finally:
-        await browser.close()
+        await close_browser(browser)

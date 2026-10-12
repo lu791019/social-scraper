@@ -52,3 +52,12 @@ def test_extract_post_from_threads_json(threads_wrapped_json):
 def test_extract_post_from_threads_json_empty():
     result = extract_post_from_threads_json({})
     assert result is None
+
+
+def test_parse_threads_post_extracts_author():
+    post = parse_threads_post({"caption": {"text": "hi"}, "user": {"username": "zuck"}})
+    assert post.author == "zuck"
+
+
+def test_parse_threads_post_author_missing():
+    assert parse_threads_post({"caption": {"text": "hi"}}).author == ""

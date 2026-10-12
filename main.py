@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import random
+from dataclasses import dataclass
 
 from config import DAILY_LIMIT, REQUEST_DELAY_MIN, REQUEST_DELAY_MAX
-from scraper.browser import create_browser
+from scraper.browser import create_browser, close_browser
 from scraper.instagram import scrape_instagram
 from scraper.threads import scrape_threads
 from scraper.github import fetch_repo
@@ -13,7 +14,8 @@ from services.sheet import (
     get_pending_rows, write_result, write_error,
     get_github_pending_rows, write_github_result, write_github_error,
 )
-from services.summarizer import summarize_and_extract, format_raw_content
+from services.summarizer import PostSummary, summarize_post, format_raw_content
+from services.discord_sink import DiscordPost, send_post_to_discord
 from services.github_summarizer import summarize_readme
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -31,8 +33,17 @@ def detect_platform(url: str) -> str:
         raise ValueError(f"不支援的平台: {url}")
 
 
-async def process_post(context, url: str) -> tuple[str, str]:
-    """處理單篇貼文：爬取 → 媒體處理 → 摘要+關鍵點，回傳 (summary, key_points)"""
+@dataclass(frozen=True)
+class ProcessedPost:
+    url: str
+    platform: str
+    author: str
+    first_image: str | None
+    summary: PostSummary
+
+
+async def process_post_detailed(context, url: str) -> ProcessedPost:
+    """處理單篇貼文：爬取 → 媒體處理 → 摘要+關鍵點+Discord 點評，回傳完整結果"""
     platform = detect_platform(url)
 
     if platform == "instagram":
@@ -54,9 +65,33 @@ async def process_post(context, url: str) -> tuple[str, str]:
         transcript=transcript,
     )
 
-    summary, key_points = await summarize_and_extract(raw_content)
+    summary = await summarize_post(raw_content)
+    return ProcessedPost(
+        url=url,
+        platform=platform,
+        author=post.author,
+        first_image=post.image_urls[0] if post.image_urls else None,
+        summary=summary,
+    )
 
-    return summary, key_points
+
+async def process_post(context, url: str) -> tuple[str, str]:
+    """Sheet 用的舊介面：回傳 (summary, key_points)"""
+    result = await process_post_detailed(context, url)
+    return result.summary.summary, result.summary.key_points
+
+
+def to_discord_post(result: ProcessedPost) -> DiscordPost:
+    return DiscordPost(
+        url=result.url,
+        platform=result.platform,
+        author=result.author,
+        title=result.summary.title,
+        summary=result.summary.summary,
+        key_points=result.summary.key_points,
+        comment=result.summary.discord_comment,
+        image_url=result.first_image,
+    )
 
 
 async def process_github_repos() -> None:
@@ -100,9 +135,10 @@ async def main():
         for row_num, url in pending:
             logger.info(f"處理第 {row_num} 列: {url}")
             try:
-                summary, key_points = await process_post(context, url)
-                write_result(row_num, summary, key_points)
+                result = await process_post_detailed(context, url)
+                write_result(row_num, result.summary.summary, result.summary.key_points)
                 logger.info(f"第 {row_num} 列完成")
+                await send_post_to_discord(to_discord_post(result))
             except Exception as e:
                 logger.error(f"第 {row_num} 列失敗: {e}")
                 write_error(row_num, str(e))
@@ -111,7 +147,7 @@ async def main():
             logger.info(f"等待 {delay:.1f} 秒")
             await asyncio.sleep(delay)
     finally:
-        await browser.close()
+        await close_browser(browser)
 
     logger.info("全部完成")
 

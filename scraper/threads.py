@@ -5,7 +5,7 @@ import random
 from patchright.async_api import BrowserContext
 
 from scraper.browser import human_like_scroll
-from scraper.instagram import PostData, _extract_image, _extract_video
+from scraper.instagram import PostData, _extract_image, _extract_video, extract_author
 from config import PAGE_TIMEOUT_MS
 
 
@@ -19,7 +19,7 @@ def parse_threads_post(item: dict) -> PostData:
     - carousel_media: [{image_versions2, video_versions, ...}, ...]
     - media_type: 19 (Threads 特有)
     """
-    post = PostData()
+    post = PostData(author=extract_author(item))
 
     # Caption
     caption = item.get("caption")
