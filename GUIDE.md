@@ -61,21 +61,15 @@ WHISPER_MODEL=mlx-community/whisper-large-v3-turbo
 
 ### 啟動步驟
 
-服務由 launchd 常駐（登入自動啟動、掛掉自動重啟），細節見 README「方式一」。
+LINE webhook 指向 Cloud Run 收件服務，Mac 端只有 launchd 常駐的工作程式（細節見 README「方式一」）。
 
 ```bash
-curl -s localhost:8010/health                                # server 是否活著
-grep -v '^t=' logs/tunnel.log | tail -3                      # 目前 ngrok 網址與 LINE webhook 測試結果
-launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper   # 改程式碼後重啟 server
+launchctl list | grep social-scraper                          # 應只有 com.dex.social-scraper.worker
+tail -20 logs/worker.err.log                                  # 處理紀錄
+curl -s https://social-scraper-inbox-413454635683.asia-east1.run.app/health
 ```
 
-不必關 Chrome：爬蟲用 Patchright 自帶的 headless Chromium。
-
-### LINE Webhook
-
-- `.env` 設了 `NGROK_DOMAIN`（ngrok 免費靜態網域）→ 網址固定，設一次即可
-- 沒設 → ngrok 每次重啟換網址，`scripts/run_tunnel.sh` 會自動 PUT 新網址到 LINE 並跑 webhook 測試
-- 手動同步：`uv run python scripts/sync_line_webhook.py`
+不必關 Chrome：爬蟲用 Patchright 自帶的 headless Chromium。Mac 關機時連結會在雲端排隊，開機後自動補做。
 
 ### 傳送連結
 
@@ -90,12 +84,13 @@ launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper   # 改程式碼後�
 
 Bot 會先立即回覆「已收到，排入佇列」，背景處理完成後再推播結果（含 Notion 頁面連結）。
 
-### 停止 server
+### 停止工作程式
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.plist
-launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.tunnel.plist
+launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.worker.plist
 ```
+
+停掉期間 LINE 照常回「收到」，連結在雲端排隊。
 
 ---
 
@@ -198,20 +193,22 @@ launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.tunnel.plist
 
 ## 常見問題排除
 
-### Bot 沒反應
+### Bot 沒回「收到」
 
 ```bash
-# 1. server 是否活著（8010，不是 8000）
-curl -s localhost:8010/health
-tail -20 logs/webhook.err.log
-
-# 2. ngrok 與 LINE webhook 是否同步
-grep -v '^t=' logs/tunnel.log | tail -5     # 看「LINE webhook → …」與「webhook 測試：成功」
-tail -5 logs/tunnel.err.log                  # 401 → LINE token 失效，到 Developers Console 重發
-
-# 3. 重啟通道（會重新同步 webhook）
-launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.tunnel
+# LINE webhook 是否指向 Cloud Run、LINE 測試是否成功
+uv run python scripts/sync_line_webhook.py --url https://social-scraper-inbox-413454635683.asia-east1.run.app
+# 收件服務 log
+CLOUDSDK_ACTIVE_CONFIG_NAME=channel-learn gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="social-scraper-inbox"' --limit 20 --freshness 1h
 ```
+
+### 回了「收到」但一直沒完成
+
+- `launchctl list | grep worker` 看工作程式在不在；`tail logs/worker.err.log` 看錯誤
+- 「連不到收件服務」→ 網路問題，恢復後自動續跑
+- 處理到一半 Mac 睡眠：30 分鐘後該筆會被重新認領
+- 失敗 3 次會收到「❌ 處理失敗（已試 3 次，不再重試）」
 
 ### IG／Threads 爬取失敗
 
@@ -239,7 +236,7 @@ launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.tunnel
 ### 測試
 
 ```bash
-# 全部單元測試（141 個）
+# 全部單元測試（155 個；收件服務：cd inbox && uv run pytest -q，18 個）
 uv run pytest tests/ -v --ignore=tests/test_integration.py
 
 # 整合測試（需真實環境）

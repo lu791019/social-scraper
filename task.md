@@ -79,3 +79,11 @@
 - [x] Patchright 與使用者 Chrome 共存驗證（不再 pkill Chrome）
 - [ ] 待 Dex：領 ngrok 免費靜態網域並填 `NGROK_DOMAIN`
 - [ ] 待驗證：IG 實測（目前網路的 FortiGate 封鎖 Instagram）
+
+## Phase：拆兩半（Cloud Run 收件 + Mac 工作程式）
+
+- [x] inbox/：LINE 驗簽 → scraper_jobs 入列；/jobs/claim（SKIP LOCKED + 租約）、/jobs/{id}/done（冪等）
+- [x] Secret Manager `social-scraper-inbox`（JSON），部署 Cloud Run asia-east1 min 0
+- [x] LINE webhook 改指 Cloud Run /callback，LINE 測試成功；ngrok 路線停用（保留為備援）
+- [x] worker.py + launchd，失敗 3 次標 error，LINE push 回報
+- [x] 端到端：簽章 callback → 入列 → Mac 處理 → Discord embed → done

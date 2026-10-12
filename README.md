@@ -7,18 +7,24 @@
 - **GitHub** — Repo 資訊 + README 中文翻譯/摘要 + 使用情境
 - **一般網頁** — 全文擷取 → Markdown 結構化排版存入 Notion Database（標題/清單/引用/連結）
 
-## 架構流程
+## 架構流程（拆兩半）
 
 ```
 LINE 傳連結
-  ├── IG/Threads URL → Patchright 爬取 → OCR/STT → 摘要 → Sheet1 + Discord（蛇摸影評）
-  ├── GitHub URL → REST API → README 摘要 → "GitHub" worksheet
-  └── 其他 URL → httpx + readability → 全文擷取 → Notion Database
-                                    ↓
-                           claude --print（走 Max 額度）
-                                    ↓
-                          寫回 Sheet / Notion → LINE 推播結果
+   ↓  webhook（固定網址）
+Cloud Run「social-scraper-inbox」（inbox/）：驗簽 → 抽連結 → Supabase scraper_jobs 入列 → 回「收到，處理中」
+   ↑  POST /jobs/claim、/jobs/{id}/done（HTTPS + Bearer 共享金鑰）
+Mac 工作程式（worker.py，launchd 常駐，每 30 秒拉一筆）
+  ├── IG/Threads → Patchright 爬取 → OCR/STT → 摘要 → Sheet1 + Discord（蛇摸影評）
+  ├── GitHub     → REST API → README 摘要 → "GitHub" worksheet
+  └── 其他網頁   → httpx + readability → Notion Database
+                       ↓
+              LINE push 回報結果給傳連結的人
 ```
+
+- 雲端只收件，不爬、不跑 AI；Mac 關機時連結在雲端排隊，開機後自動補做
+- Mac 連不到 Supabase pooler，所以 Mac 不直連 DB，一律走收件服務的 HTTPS 端點
+- 失敗會重新排隊，累計 3 次標 `error` 並通知；working 超過 30 分鐘沒回報（Mac 中途睡眠）會被重新認領
 
 ## 前置需求
 
@@ -70,51 +76,56 @@ cp .env.example .env
 
 ## 使用方式
 
-### 方式一：LINE Bot（推薦，launchd 常駐）
+### 方式一：LINE Bot（推薦）
 
-兩個 LaunchAgent，登入後自動啟動、掛掉 30 秒內重啟：
+**雲端收件服務**（GCP 專案 `channel-learn-prod`，region `asia-east1`，min-instances 0）
 
-| Label | 腳本 | 內容 | Log |
-|-------|------|------|-----|
-| `com.dex.social-scraper` | `scripts/run_webhook.sh` | uvicorn `127.0.0.1:${WEBHOOK_PORT:-8010}` | `logs/webhook.log`、`logs/webhook.err.log` |
-| `com.dex.social-scraper.tunnel` | `scripts/run_tunnel.sh` | ngrok → 8010，啟動後自動同步 LINE webhook | `logs/tunnel.log`、`logs/tunnel.err.log` |
-
-> 埠用 **8010**：8000 被 channel-learn API 佔用。要改就在 `.env` 設 `WEBHOOK_PORT`。
+| 項目 | 值 |
+|------|----|
+| 服務網址 | `https://social-scraper-inbox-413454635683.asia-east1.run.app` |
+| LINE Webhook URL | 上面網址 + `/callback` |
+| 佇列 | channel-learn 的 Supabase DB，表 `scraper_jobs`（服務啟動時冪等建表，開 RLS） |
+| Secret | `database-url`（沿用 channel-learn）、`social-scraper-inbox`（JSON：LINE secret／token、worker 共享金鑰） |
 
 ```bash
-# 安裝 / 重新安裝
-cp deploy/com.dex.social-scraper*.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.dex.social-scraper.plist
-launchctl load ~/Library/LaunchAgents/com.dex.social-scraper.tunnel.plist
+# 部署（改了 inbox/ 之後）
+cd inbox && CLOUDSDK_ACTIVE_CONFIG_NAME=channel-learn gcloud run deploy social-scraper-inbox \
+  --source . --region asia-east1 --min-instances 0 --max-instances 2 --memory 256Mi \
+  --allow-unauthenticated \
+  --set-secrets DATABASE_URL=database-url:latest,INBOX_SECRETS=social-scraper-inbox:latest
 
-# 健康檢查
-curl -s localhost:8010/health        # {"status":"ok","running":0,"waiting":0}
+# 測試（用拋棄式 postgres 容器，需要 docker）
+cd inbox && uv run pytest -q
 
-# 改了程式碼後重啟
-launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper
-
-# 停用
-launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.plist
-launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.tunnel.plist
+# LINE webhook 指到 Cloud Run 並跑 LINE 的 webhook 測試
+uv run python scripts/sync_line_webhook.py --url https://social-scraper-inbox-413454635683.asia-east1.run.app
 ```
 
-**固定網址（建議）**：ngrok 免費帳號可領 1 個靜態網域。
-
-1. 登入 [dashboard.ngrok.com](https://dashboard.ngrok.com/) → 左側 **Universal Gateway → Domains**（舊版介面叫 Cloud Edge → Domains）
-2. 按 **New Domain / Create Domain**，免費方案會配一個 `xxx.ngrok-free.app`
-3. 寫進 `.env`：`NGROK_DOMAIN=xxx.ngrok-free.app`（不含 `https://`）
-4. `launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.tunnel`
-
-沒設 `NGROK_DOMAIN` 也能用：每次 ngrok 重啟換網址時，`run_tunnel.sh` 會呼叫 `scripts/sync_line_webhook.py`，把 LINE webhook 改成新網址並跑 LINE 的 webhook 測試，結果寫在 `logs/tunnel.log`。手動同步：
+**Mac 工作程式**（launchd `com.dex.social-scraper.worker`，登入自動啟動、掛掉 30 秒內重啟，log 在 `logs/worker*.log`）
 
 ```bash
-uv run python scripts/sync_line_webhook.py   # 需 ngrok 已在跑
+# .env 需要 INBOX_URL 與 INBOX_WORKER_KEY（與 secret 內的 worker_key 同值）
+cp deploy/com.dex.social-scraper.worker.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.dex.social-scraper.worker.plist
+
+launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker   # 改程式碼後重啟
+tail -f logs/worker.err.log                                         # 處理紀錄
 ```
 
 在 LINE 傳連結給 Bot：
 - IG/Threads 連結 → 寫入 Sheet1，並發 Discord
 - GitHub repo 連結 → 寫入 GitHub 工作表
 - 其他網頁連結 → 全文存入 Notion
+- 傳「進度」→ 回覆排隊中＋處理中筆數
+
+### 備援：本機 webhook + ngrok（已停用）
+
+雲端掛掉時才用。程式保留在 `line_webhook/app.py`、`scripts/run_webhook.sh`、`scripts/run_tunnel.sh`，plist 在 `deploy/com.dex.social-scraper.plist` 與 `deploy/com.dex.social-scraper.tunnel.plist`（目前未安裝）。
+
+- 埠 **8010**（8000 被 channel-learn API 佔用），`.env` 的 `WEBHOOK_PORT` 可改
+- `run_tunnel.sh` 啟動 ngrok 後會自動把 LINE webhook 改成 ngrok 網址；**啟用備援會覆蓋 Cloud Run 的 webhook 設定**，恢復雲端時要再跑上面的 `sync_line_webhook.py --url`
+- `.env` 設 `NGROK_DOMAIN`（ngrok 免費靜態網域）可固定網址
+- 備援模式與工作程式不要同時跑：兩邊都會處理 IG/Threads
 
 ### 方式二：手動批次處理
 
@@ -164,8 +175,11 @@ uv run python main.py
 ```
 social-scraper/
 ├── main.py                      # 批次主控流程 + process_post_detailed（IG/Threads 共用）
+├── worker.py                    # Mac 工作程式：向收件服務拉單處理
+├── inbox/                       # Cloud Run 收件服務（自己的 Dockerfile、pyproject、tests）
 ├── scripts/
-│   ├── run_webhook.sh           # launchd 用：啟動 uvicorn
+│   ├── run_worker.sh            # launchd 用：啟動 worker.py
+│   ├── run_webhook.sh           # 備援：啟動本機 uvicorn
 │   ├── run_tunnel.sh            # launchd 用：啟動 ngrok + 同步 LINE webhook
 │   └── sync_line_webhook.py     # 把 LINE webhook 指到目前 ngrok 網址並測試
 ├── deploy/                      # launchd plist（複製到 ~/Library/LaunchAgents）
@@ -189,7 +203,9 @@ social-scraper/
 │   ├── summarizer.py            # IG/Threads 摘要 + 關鍵點
 │   ├── github_summarizer.py     # GitHub README 中文摘要 + 使用情境
 │   ├── notion.py                # Notion Database 寫入（全文存檔）
-│   └── discord_sink.py          # Discord webhook embed（蛇摸影評）
+│   ├── discord_sink.py          # Discord webhook embed（蛇摸影評）
+│   ├── pipeline.py              # 單筆工作處理流程（worker 用）
+│   └── line_push.py             # LINE push 回報
 ├── tests/                       # 單元測試 + 整合測試
 ├── .env.example                 # 環境變數範例
 ├── credentials.json             # Google Service Account 金鑰（不進版控）
@@ -213,7 +229,7 @@ social-scraper/
 ## 測試
 
 ```bash
-# 單元測試（141 個）
+# 單元測試（155 個；收件服務另有 inbox/tests 18 個）
 uv run pytest tests/ -v --ignore=tests/test_integration.py
 
 # 整合測試（需真實 Sheet + Claude Max；不必關 Chrome）
@@ -233,5 +249,5 @@ uv run pytest tests/test_integration.py -v -m integration -s
 - **媒體降級不靜默**：圖片 OCR／影片轉錄失敗時以貼文文字繼續，警告會附在 LINE 完成訊息
 - **每日上限 30 篇**：`config.py` 的 `DAILY_LIMIT`
 - **mlx-whisper 首次下載**：第一次執行自動下載模型 ~1.5GB
-- **ngrok URL 會變**：沒設 `NGROK_DOMAIN` 時由 `run_tunnel.sh` 自動同步 LINE webhook；設了靜態網域就固定
+- **LINE webhook 指向 Cloud Run**：只有啟用 ngrok 備援時才會被改掉
 - **GitHub API 限額**：未設 token 為 60 req/hr，設了為 5000 req/hr
