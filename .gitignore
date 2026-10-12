@@ -31,3 +31,6 @@ credentials.json
 
 # Claude
 .claude/
+
+# Runtime logs (launchd)
+logs/
