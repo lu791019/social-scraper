@@ -67,3 +67,15 @@
 - 共用 `PostData` dataclass 和 `_extract_image`/`_extract_video` helpers（DRY）
 - 38 個新增單元測試（article + notion + line_handler）全部通過
 - 整合測試需要：關閉 Chrome、真實 Sheet、claude CLI Max 訂閱
+
+## Phase：Discord 出口 + 常駐化（feat/discord-sink）
+
+- [x] 診斷：.venv 不存在、8000 被佔用、LINE webhook 指向已失效的 ngrok 臨時網址
+- [x] 埠改 8010（`WEBHOOK_PORT`）、新增 `/health`
+- [x] launchd 常駐 uvicorn + ngrok，ngrok 啟動自動同步 LINE webhook 並測試
+- [x] Discord 出口（蛇摸影評 embed），失敗只記 log
+- [x] Threads 改版修正：網址短碼比對目標貼文、JSON 重讀
+- [x] 媒體失敗降級 + LINE 警告；FortiGate 封鎖時給可讀訊息
+- [x] Patchright 與使用者 Chrome 共存驗證（不再 pkill Chrome）
+- [ ] 待 Dex：領 ngrok 免費靜態網域並填 `NGROK_DOMAIN`
+- [ ] 待驗證：IG 實測（目前網路的 FortiGate 封鎖 Instagram）

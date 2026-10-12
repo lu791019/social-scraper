@@ -61,25 +61,21 @@ WHISPER_MODEL=mlx-community/whisper-large-v3-turbo
 
 ### 啟動步驟
 
+服務由 launchd 常駐（登入自動啟動、掛掉自動重啟），細節見 README「方式一」。
+
 ```bash
-# 步驟 1：關閉 Chrome（Patchright 限制，IG/Threads 必需）
-pkill -f "Google Chrome"
-
-# 步驟 2：啟動 server
-uv run uvicorn line_webhook.app:app --port 8000 &
-
-# 步驟 3：啟動 ngrok（另一個終端視窗）
-ngrok http 8000
+curl -s localhost:8010/health                                # server 是否活著
+grep -v '^t=' logs/tunnel.log | tail -3                      # 目前 ngrok 網址與 LINE webhook 測試結果
+launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper   # 改程式碼後重啟 server
 ```
 
-### 設定 LINE Webhook（每次 ngrok 重啟後都要做）
+不必關 Chrome：爬蟲用 Patchright 自帶的 headless Chromium。
 
-1. 複製 ngrok 顯示的 HTTPS URL（例：`https://abc123.ngrok-free.app`）
-2. 到 [LINE Developers Console](https://developers.line.biz/)
-3. 進入你的 Channel → **Messaging API** 分頁
-4. **Webhook URL** → 貼上 `https://abc123.ngrok-free.app/callback`
-5. 確認 **Use webhook** 已開啟
-6. 點 **Verify** 確認連線成功
+### LINE Webhook
+
+- `.env` 設了 `NGROK_DOMAIN`（ngrok 免費靜態網域）→ 網址固定，設一次即可
+- 沒設 → ngrok 每次重啟換網址，`scripts/run_tunnel.sh` 會自動 PUT 新網址到 LINE 並跑 webhook 測試
+- 手動同步：`uv run python scripts/sync_line_webhook.py`
 
 ### 傳送連結
 
@@ -97,11 +93,8 @@ Bot 會先立即回覆「已收到，排入佇列」，背景處理完成後再�
 ### 停止 server
 
 ```bash
-# 找到 server PID
-lsof -i :8000
-
-# 停止
-kill <PID>
+launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.plist
+launchctl unload ~/Library/LaunchAgents/com.dex.social-scraper.tunnel.plist
 ```
 
 ---
@@ -119,7 +112,6 @@ kill <PID>
 
 2. **執行批次處理**
    ```bash
-   pkill -f "Google Chrome"    # IG/Threads 需要
    uv run python main.py
    ```
 
@@ -209,32 +201,30 @@ kill <PID>
 ### Bot 沒反應
 
 ```bash
-# 1. 確認 server 在跑
-lsof -i :8000
+# 1. server 是否活著（8010，不是 8000）
+curl -s localhost:8010/health
+tail -20 logs/webhook.err.log
 
-# 2. 確認 ngrok 在跑
-# 瀏覽器開 http://127.0.0.1:4040 看 ngrok dashboard
+# 2. ngrok 與 LINE webhook 是否同步
+grep -v '^t=' logs/tunnel.log | tail -5     # 看「LINE webhook → …」與「webhook 測試：成功」
+tail -5 logs/tunnel.err.log                  # 401 → LINE token 失效，到 Developers Console 重發
 
-# 3. 確認 Webhook URL 正確
-# LINE Developers Console → Messaging API → Webhook URL → Verify
+# 3. 重啟通道（會重新同步 webhook）
+launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.tunnel
 ```
 
-### 斷網後恢復
+### IG／Threads 爬取失敗
 
-```bash
-# ngrok 斷了要重開
-ngrok http 8000
-# 拿新 URL 去 LINE Console 更新 Webhook URL
-
-# server 也斷了的話
-uv run uvicorn line_webhook.app:app --port 8000 &
-```
-
-### IG 爬取失敗
-
-- 確認 Chrome 已全部關閉：`pkill -f "Google Chrome"`
+- 訊息說「網路攔截了這個網站的 SSL 連線」：所在網路（如 FortiGate）封鎖 Instagram，換網路（手機熱點）再試
+- Threads 完成訊息附「圖片 OCR 失敗」：同上，圖片在 cdninstagram.com 被擋，摘要只用了貼文文字
+- 「找不到貼文資料」：版面可能又改了，先用 `scraper/page_json.find_post_by_code` 的思路檢查頁面 JSON 裡 `code` 欄位
+- 升級 patchright 後報「Executable doesn't exist」：`uv run patchright install chromium`
 - 部分貼文需要登入（私人帳號），無法匿名存取
-- 網路不穩定時可能逾時，重新處理即可（清空 B 欄）
+
+### Discord 沒收到
+
+- LINE 完成訊息若附「⚠️ Discord 未送出」，看 `logs/webhook.err.log` 的「Discord 發送失敗」行
+- 確認 `.env` 有 `DISCORD_WEBHOOK_URL`；改 `.env` 後要 kickstart server
 
 ### GitHub 處理失敗
 
@@ -249,7 +239,7 @@ uv run uvicorn line_webhook.app:app --port 8000 &
 ### 測試
 
 ```bash
-# 全部單元測試（72 個）
+# 全部單元測試（141 個）
 uv run pytest tests/ -v --ignore=tests/test_integration.py
 
 # 整合測試（需真實環境）
