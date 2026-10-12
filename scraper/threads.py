@@ -1,11 +1,12 @@
 import asyncio
-import json
 import random
+import re
 
 from patchright.async_api import BrowserContext
 
-from scraper.browser import human_like_scroll
+from scraper.browser import goto, human_like_scroll
 from scraper.instagram import PostData, _extract_image, _extract_video, extract_author
+from scraper.page_json import find_post_by_code, load_page_json  # noqa: F401 — 測試沿用 threads 路徑
 from config import PAGE_TIMEOUT_MS
 
 
@@ -72,27 +73,55 @@ def _find_thread_items(data, depth: int = 0) -> list | None:
     return None
 
 
+_SHORTCODE_RE = re.compile(r"/post/([A-Za-z0-9_-]+)")
+
+
+def shortcode_from_url(url: str) -> str | None:
+    """https://www.threads.com/@user/post/<code> → <code>"""
+    match = _SHORTCODE_RE.search(url)
+    return match.group(1) if match else None
+
+
+JSON_RETRY_ATTEMPTS = 4
+JSON_RETRY_DELAY_S = 2.0
+
+
+def _find_in_blobs(blobs: list, code: str) -> dict | None:
+    for text, data in blobs:
+        if code in text:
+            item = find_post_by_code(data, code)
+            if item:
+                return item
+    return None
+
+
 async def scrape_threads(context: BrowserContext, url: str) -> PostData:
     """用 Patchright 爬取 Threads 貼文頁面"""
     page = await context.new_page()
     try:
-        await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
+        await goto(page, url, PAGE_TIMEOUT_MS)
         await asyncio.sleep(random.uniform(2, 5))
         await human_like_scroll(page)
 
-        # 從 data-sjs script 提取
-        scripts = await page.query_selector_all('script[type="application/json"]')
-        for script in scripts:
-            text = await script.inner_text()
-            if "thread_items" not in text:
-                continue
-            try:
-                data = json.loads(text)
-            except json.JSONDecodeError:
-                continue
-            post = extract_post_from_threads_json(data)
-            if post and (post.caption or post.image_urls or post.video_url):
-                return post
+        # 主要：用網址短碼精準比對目標貼文；JSON 偶爾晚於 networkidle 才出現，重讀幾次
+        code = shortcode_from_url(url)
+        blobs = await load_page_json(page)
+        for attempt in range(JSON_RETRY_ATTEMPTS if code else 0):
+            item = _find_in_blobs(blobs, code)
+            if item:
+                return parse_threads_post(item)
+            if attempt < JSON_RETRY_ATTEMPTS - 1:
+                await asyncio.sleep(JSON_RETRY_DELAY_S)
+                blobs = await load_page_json(page)
+
+        # 舊版結構：thread_items（無短碼可比對時才用，可能是其他串）
+        if not code:
+            for text, data in blobs:
+                if "thread_items" not in text:
+                    continue
+                post = extract_post_from_threads_json(data)
+                if post and (post.caption or post.image_urls or post.video_url):
+                    return post
 
         # 備用：從 meta tag 取 caption
         meta = await page.query_selector('meta[property="og:description"]')

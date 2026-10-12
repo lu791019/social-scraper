@@ -20,3 +20,15 @@ def test_ua_pool_has_multiple_entries():
 
 def test_viewport_pool_has_multiple_entries():
     assert len(VIEWPORTS) >= 3
+
+
+from scraper.browser import explain_navigation_error  # noqa: E402
+
+
+def test_explain_cert_error_as_network_block():
+    msg = explain_navigation_error(Exception("Page.goto: net::ERR_CERT_AUTHORITY_INVALID at https://www.instagram.com/p/x/"))
+    assert "網路" in msg and "攔截" in msg
+
+
+def test_explain_other_errors_passthrough():
+    assert explain_navigation_error(Exception("Timeout 30000ms exceeded")) is None

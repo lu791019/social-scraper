@@ -74,3 +74,17 @@ def test_parse_ig_post_extracts_author():
 def test_parse_ig_post_falls_back_to_owner():
     post = parse_ig_post({"caption": {"text": "hi"}, "owner": {"username": "nasa"}})
     assert post.author == "nasa"
+
+
+from scraper.instagram import ig_shortcode_from_url, find_post_by_code  # noqa: E402
+
+
+def test_ig_shortcode_from_url():
+    assert ig_shortcode_from_url("https://www.instagram.com/p/DAbc_1-x/") == "DAbc_1-x"
+    assert ig_shortcode_from_url("https://www.instagram.com/reel/XyZ/?igsh=1") == "XyZ"
+    assert ig_shortcode_from_url("https://www.instagram.com/natgeo/") is None
+
+
+def test_find_ig_post_by_code_in_unknown_layout():
+    data = {"x": [{"y": {"code": "XyZ", "user": {"username": "nasa"}, "caption": {"text": "hi"}}}]}
+    assert parse_ig_post(find_post_by_code(data, "XyZ")).author == "nasa"

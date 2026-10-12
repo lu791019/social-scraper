@@ -61,3 +61,41 @@ def test_parse_threads_post_extracts_author():
 
 def test_parse_threads_post_author_missing():
     assert parse_threads_post({"caption": {"text": "hi"}}).author == ""
+
+
+# ── 2026 改版：目標貼文在 data.media，thread_items 是其他推薦串 ──
+
+from scraper.threads import shortcode_from_url, find_post_by_code  # noqa: E402
+
+_PAGE = {
+    "require": [["x", "y", None, [{"__bbox": {"result": {"data": {"media": {
+        "code": "TARGET1", "user": {"username": "zuck"},
+        "caption": {"text": "本人貼文"},
+        "image_versions2": {"candidates": [{"url": "https://img/t.jpg", "width": 10, "height": 10}]},
+    }}}}}]]],
+}
+_OTHER = {"thread_items": [{"post": {"code": "OTHER", "user": {"username": "someone"}, "caption": {"text": "別人"}}}]}
+
+
+def test_shortcode_from_url():
+    assert shortcode_from_url("https://www.threads.com/@zuck/post/Dd1MqeVG3vT") == "Dd1MqeVG3vT"
+    assert shortcode_from_url("https://www.threads.net/@a/post/AbC_-1/?xmt=1") == "AbC_-1"
+    assert shortcode_from_url("https://www.threads.com/@zuck") is None
+
+
+def test_find_post_by_code_picks_target_not_other_threads():
+    assert find_post_by_code(_OTHER, "TARGET1") is None
+    post = find_post_by_code(_PAGE, "TARGET1")
+    assert post["user"]["username"] == "zuck"
+
+
+def test_find_post_by_code_skips_stub_without_content():
+    data = {"a": {"code": "X"}, "b": {"code": "X", "caption": {"text": "full"}}}
+    assert find_post_by_code(data, "X")["caption"]["text"] == "full"
+
+
+def test_parse_target_post_from_new_layout():
+    post = parse_threads_post(find_post_by_code(_PAGE, "TARGET1"))
+    assert post.author == "zuck"
+    assert post.caption == "本人貼文"
+    assert post.image_urls == ["https://img/t.jpg"]

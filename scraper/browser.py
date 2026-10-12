@@ -42,6 +42,29 @@ async def human_like_scroll(page: Page) -> None:
         await asyncio.sleep(random.uniform(0.5, 1.5))
 
 
+_BLOCKED_MARKERS = ("ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID")
+
+
+def explain_navigation_error(exc: Exception) -> str | None:
+    """把「網路層攔截」類錯誤翻成可讀訊息；其他錯誤回 None 照原樣拋。"""
+    text = str(exc)
+    if any(marker in text for marker in _BLOCKED_MARKERS):
+        return ("目前網路攔截了這個網站的 SSL 連線（常見於公司／教室防火牆，例如 FortiGate 封鎖社群網站），"
+                "請換網路（如手機熱點）再試")
+    return None
+
+
+async def goto(page: Page, url: str, timeout_ms: int) -> None:
+    """page.goto 包一層：網路封鎖時拋出可讀的 RuntimeError"""
+    try:
+        await page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+    except Exception as e:
+        reason = explain_navigation_error(e)
+        if reason:
+            raise RuntimeError(reason) from e
+        raise
+
+
 async def create_browser(proxy: str | None = None) -> tuple[Browser, BrowserContext]:
     """建立 Patchright 瀏覽器與 context，套用防封設定"""
     pw = await async_playwright().start()

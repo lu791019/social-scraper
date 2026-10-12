@@ -1,11 +1,13 @@
 import asyncio
 import json
 import random
+import re
 from dataclasses import dataclass, field
 
 from patchright.async_api import BrowserContext
 
-from scraper.browser import human_like_scroll
+from scraper.browser import goto, human_like_scroll
+from scraper.page_json import find_post_by_code, load_page_json  # noqa: F401
 from config import PAGE_TIMEOUT_MS
 
 
@@ -115,11 +117,20 @@ def _find_shortcode_items(data, depth: int = 0) -> list | None:
     return None
 
 
+_IG_SHORTCODE_RE = re.compile(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)")
+
+
+def ig_shortcode_from_url(url: str) -> str | None:
+    """https://www.instagram.com/p/<code>/ → <code>"""
+    match = _IG_SHORTCODE_RE.search(url)
+    return match.group(1) if match else None
+
+
 async def scrape_instagram(context: BrowserContext, url: str) -> PostData:
     """用 Patchright 爬取 IG 貼文頁面"""
     page = await context.new_page()
     try:
-        await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
+        await goto(page, url, PAGE_TIMEOUT_MS)
         await asyncio.sleep(random.uniform(2, 5))
         await human_like_scroll(page)
 
@@ -141,6 +152,13 @@ async def scrape_instagram(context: BrowserContext, url: str) -> PostData:
             post = extract_post_from_json(data)
             if post and (post.caption or post.image_urls or post.video_url):
                 return post
+
+        # 後備：版面改動時用網址短碼比對任何帶內容的貼文 dict
+        code = ig_shortcode_from_url(url)
+        if code:
+            for text, data in await load_page_json(page):
+                if code in text and (item := find_post_by_code(data, code)):
+                    return parse_ig_post(item)
 
         # 備用：從 meta tag 取 caption
         meta = await page.query_selector('meta[property="og:description"]')
