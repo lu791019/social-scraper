@@ -41,6 +41,11 @@ TEMP_DIR = Path("/tmp/social-scraper")
 # Webhook server（8000 被其他專案佔用，預設 8010）
 WEBHOOK_PORT: int = int(os.environ.get("WEBHOOK_PORT", "8010"))
 
+# 雲端收件服務（Cloud Run social-scraper-inbox）＋ Mac 工作程式
+INBOX_URL: str = os.environ.get("INBOX_URL", "")
+INBOX_WORKER_KEY: str = os.environ.get("INBOX_WORKER_KEY", "")
+WORKER_POLL_SECONDS: float = float(os.environ.get("WORKER_POLL_SECONDS", "30"))
+
 # Discord 出口（IG/Threads 完成後以「蛇摸影評」發 embed；未設定則略過）
 DISCORD_WEBHOOK_URL: str = os.environ.get("DISCORD_WEBHOOK_URL", "")
 DISCORD_SNAKE_AVATAR: str = os.environ.get("DISCORD_SNAKE_AVATAR", "")
