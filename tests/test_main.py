@@ -59,3 +59,29 @@ def test_to_discord_post_maps_fields():
     dp = to_discord_post(processed)
     assert (dp.url, dp.platform, dp.author, dp.title, dp.summary, dp.key_points, dp.comment, dp.image_url) == \
         ("u", "instagram", "a", "標題", "摘要", "• 一", "嘶～", None)
+
+
+@pytest.mark.asyncio
+async def test_media_failure_degrades_with_visible_warning():
+    """圖片下載被擋：用貼文文字繼續，但 warnings 要帶出來（不能靜默降級）"""
+    post = PostData(caption="文", image_urls=["https://img/1.jpg"], video_url="https://v/1.mp4", author="a")
+    summarize = AsyncMock(return_value=_SUMMARY)
+    with patch("main.scrape_threads", AsyncMock(return_value=post)), \
+         patch("main.process_images", AsyncMock(side_effect=RuntimeError("SSL blocked"))), \
+         patch("main.process_video", AsyncMock(side_effect=RuntimeError("ffmpeg"))), \
+         patch("main.summarize_post", summarize):
+        result = await process_post_detailed(None, "https://www.threads.com/@a/post/X")
+    assert result.summary is _SUMMARY
+    assert "【貼文文字】" in summarize.call_args.args[0]
+    assert len(result.warnings) == 2
+    assert "圖片" in result.warnings[0] and "影片" in result.warnings[1]
+
+
+@pytest.mark.asyncio
+async def test_media_failure_without_caption_still_raises():
+    """沒有任何文字可摘要時，媒體失敗就整篇失敗"""
+    post = PostData(caption="", image_urls=["https://img/1.jpg"])
+    with patch("main.scrape_threads", AsyncMock(return_value=post)), \
+         patch("main.process_images", AsyncMock(side_effect=RuntimeError("SSL blocked"))):
+        with pytest.raises(RuntimeError, match="沒有可摘要的內容"):
+            await process_post_detailed(None, "https://www.threads.com/@a/post/X")

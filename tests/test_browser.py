@@ -32,3 +32,7 @@ def test_explain_cert_error_as_network_block():
 
 def test_explain_other_errors_passthrough():
     assert explain_navigation_error(Exception("Timeout 30000ms exceeded")) is None
+
+
+def test_explain_python_ssl_verify_failure():
+    assert explain_navigation_error(Exception("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed")) is not None

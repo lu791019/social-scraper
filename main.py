@@ -4,7 +4,7 @@ import random
 from dataclasses import dataclass
 
 from config import DAILY_LIMIT, REQUEST_DELAY_MIN, REQUEST_DELAY_MAX
-from scraper.browser import create_browser, close_browser
+from scraper.browser import create_browser, close_browser, explain_navigation_error
 from scraper.instagram import scrape_instagram
 from scraper.threads import scrape_threads
 from scraper.github import fetch_repo
@@ -40,6 +40,7 @@ class ProcessedPost:
     author: str
     first_image: str | None
     summary: PostSummary
+    warnings: tuple[str, ...] = ()
 
 
 async def process_post_detailed(context, url: str) -> ProcessedPost:
@@ -51,19 +52,17 @@ async def process_post_detailed(context, url: str) -> ProcessedPost:
     else:
         post = await scrape_threads(context, url)
 
-    ocr_text = ""
-    if post.image_urls:
-        ocr_text = await process_images(post.image_urls)
-
-    transcript = ""
-    if post.video_url:
-        transcript = await process_video(post.video_url)
+    warnings: list[str] = []
+    ocr_text = await _try_media(post.image_urls and process_images(post.image_urls), "圖片 OCR", warnings)
+    transcript = await _try_media(post.video_url and process_video(post.video_url), "影片逐字稿", warnings)
 
     raw_content = format_raw_content(
         caption=post.caption,
         ocr_text=ocr_text,
         transcript=transcript,
     )
+    if not raw_content.strip():
+        raise RuntimeError("沒有可摘要的內容：" + ("；".join(warnings) or "貼文無文字與媒體"))
 
     summary = await summarize_post(raw_content)
     return ProcessedPost(
@@ -72,7 +71,21 @@ async def process_post_detailed(context, url: str) -> ProcessedPost:
         author=post.author,
         first_image=post.image_urls[0] if post.image_urls else None,
         summary=summary,
+        warnings=tuple(warnings),
     )
+
+
+async def _try_media(job, label: str, warnings: list[str]) -> str:
+    """媒體處理失敗不擋整篇：記 log 並把警告帶回呼叫端顯示（不靜默降級）"""
+    if not job:
+        return ""
+    try:
+        return await job
+    except Exception as e:
+        logger.error(f"{label}失敗，改用貼文文字繼續：{e}")
+        reason = explain_navigation_error(e) or str(e)[:80]
+        warnings.append(f"{label}失敗：{reason}；摘要只根據貼文文字")
+        return ""
 
 
 async def process_post(context, url: str) -> tuple[str, str]:
@@ -137,7 +150,7 @@ async def main():
             try:
                 result = await process_post_detailed(context, url)
                 write_result(row_num, result.summary.summary, result.summary.key_points)
-                logger.info(f"第 {row_num} 列完成")
+                logger.info(f"第 {row_num} 列完成" + (f"（警告：{'；'.join(result.warnings)}）" if result.warnings else ""))
                 await send_post_to_discord(to_discord_post(result))
             except Exception as e:
                 logger.error(f"第 {row_num} 列失敗: {e}")

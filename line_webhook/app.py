@@ -99,7 +99,10 @@ async def run_scraper_for_url(user_id: str, url: str, row_num: int) -> None:
             write_result(row_num, summary, result.summary.key_points)
             # Discord 失敗只記 log，不影響 Sheet 與 LINE 回覆
             discord_ok = await send_post_to_discord(to_discord_post(result))
-            discord_note = "" if discord_ok else "\n⚠️ Discord 未送出（見 logs）"
+            notes = [f"⚠️ {w}" for w in result.warnings]
+            if not discord_ok:
+                notes.append("⚠️ Discord 未送出（見 logs）")
+            discord_note = "".join(f"\n{n}" for n in notes)
             _running -= 1
             push_text(user_id, f"✅ 第 {row_num} 列完成！\n\n📝 摘要：{summary[:200]}{discord_note}\n\n（{queue_status_text()}）")
         except Exception as e:

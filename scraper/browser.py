@@ -42,7 +42,7 @@ async def human_like_scroll(page: Page) -> None:
         await asyncio.sleep(random.uniform(0.5, 1.5))
 
 
-_BLOCKED_MARKERS = ("ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID")
+_BLOCKED_MARKERS = ("ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID", "CERTIFICATE_VERIFY_FAILED")
 
 
 def explain_navigation_error(exc: Exception) -> str | None:
