@@ -19,6 +19,8 @@ from services.discord_sink import DiscordPost, send_post_to_discord
 from services.github_summarizer import summarize_readme
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# httpx 的 INFO log 會印出完整請求網址（含 Discord webhook token），只留 WARNING 以上
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

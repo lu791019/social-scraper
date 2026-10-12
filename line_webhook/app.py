@@ -21,6 +21,8 @@ from line_webhook.line_handler import extract_urls, extract_github_urls, extract
 from services.sheet import append_url, append_github_repo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# httpx 的 INFO log 會印出完整請求網址（含 Discord webhook token），只留 WARNING 以上
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()

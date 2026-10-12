@@ -1,6 +1,7 @@
 """等 ngrok 起來 → 把 LINE webhook 指到 <public_url>/callback → 呼叫 LINE webhook 測試。
 
 用法：uv run python scripts/sync_line_webhook.py [--inspect 127.0.0.1:4040] [--port 8010]
+      uv run python scripts/sync_line_webhook.py --url https://social-scraper-inbox-...run.app
 """
 import argparse
 import os
@@ -20,6 +21,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--inspect", default=os.environ.get("NGROK_INSPECT_ADDR", "127.0.0.1:4040"))
     ap.add_argument("--port", type=int, default=int(os.environ.get("WEBHOOK_PORT", "8010")))
+    ap.add_argument("--url", help="直接指定公開網址（如 Cloud Run），不經 ngrok")
     args = ap.parse_args()
 
     token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
@@ -28,7 +30,8 @@ def main() -> int:
         return 1
     with httpx.Client() as client:
         try:
-            target = callback_url(wait_for_public_url(args.inspect, args.port, client))
+            public = args.url or wait_for_public_url(args.inspect, args.port, client)
+            target = callback_url(public)
             result = sync_endpoint(target, token, client)
         except (RuntimeError, httpx.HTTPError) as e:
             print(f"⚠️ {e}", file=sys.stderr)

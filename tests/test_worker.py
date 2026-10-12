@@ -82,3 +82,9 @@ async def test_unknown_platform_fails_job():
     with patch("worker.push_text"):
         status = await worker.handle_job({**JOB, "platform": "tiktok"}, _inbox([], done_status="queued"))
     assert status == "queued"
+
+
+def test_httpx_request_urls_are_not_logged():
+    """httpx INFO 會把 Discord webhook 網址（含 token）寫進 log"""
+    import logging
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
