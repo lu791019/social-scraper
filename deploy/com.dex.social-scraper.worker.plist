@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dex.social-scraper.worker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/dex/social-scraper/scripts/run_worker.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dex/social-scraper</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- launchd PATH 很窄：補 Homebrew（uv/ngrok/ffmpeg）與 ~/.local/bin（claude CLI） -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/Users/dex/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/dex/social-scraper/logs/worker.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dex/social-scraper/logs/worker.err.log</string>
+</dict>
+</plist>
