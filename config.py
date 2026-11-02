@@ -50,6 +50,15 @@ WORKER_POLL_SECONDS: float = float(os.environ.get("WORKER_POLL_SECONDS", "30"))
 DISCORD_WEBHOOK_URL: str = os.environ.get("DISCORD_WEBHOOK_URL", "")
 DISCORD_SNAKE_AVATAR: str = os.environ.get("DISCORD_SNAKE_AVATAR", "")
 
+
+def parse_role_ids(raw: str) -> tuple[str, ...]:
+    """逗號分隔的 Discord 身分組 id，只收純數字。"""
+    return tuple(p for p in (x.strip() for x in raw.split(",")) if p.isdigit())
+
+
+# 貼文要 @ 的身分組（Dex 11/2：知識訂閱類，例如「📰 情報訂閱」）；空＝不 tag
+DISCORD_MENTION_ROLE_IDS: tuple[str, ...] = parse_role_ids(os.environ.get("DISCORD_MENTION_ROLE_IDS", ""))
+
 # Notion
 NOTION_TOKEN: str = os.environ.get("NOTION_TOKEN", "")
 NOTION_DATABASE_ID: str = os.environ.get("NOTION_DATABASE_ID", "")

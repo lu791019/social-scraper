@@ -32,3 +32,4 @@
 - 只有 IG/Threads 發 Discord；GitHub、一般網頁先不發
 - 點評與標題來自摘要 prompt 的 `【Discord標題】`、`【Discord點評】` 段落；`_parse_summary_and_key_points` 會把它們切掉，Sheet 欄位內容不可被污染
 - Discord 失敗只記 log 回 False，不拋例外；測試一律 mock httpx，真發只在端到端驗證時做
+- 貼文 @ 身分組：`.env` 的 `DISCORD_MENTION_ROLE_IDS`（逗號分隔的 role id，目前是「📰 情報訂閱」1558327479104708618）；`allowed_mentions` 只放這些 id 的白名單，不開 `parse`。改了 `.env` 要 `launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker` 讓 worker 重讀。webhook 目前指到 #電影海報牆-脆與ig精選

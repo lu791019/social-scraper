@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from config import DISCORD_SNAKE_AVATAR, DISCORD_WEBHOOK_URL
+from config import DISCORD_MENTION_ROLE_IDS, DISCORD_SNAKE_AVATAR, DISCORD_WEBHOOK_URL
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +60,8 @@ def _fallback_title(post: DiscordPost) -> str:
     return f"@{post.author} 的 {label} 貼文" if post.author else f"{label} 貼文"
 
 
-def build_payload(post: DiscordPost, avatar_url: str) -> dict:
-    """組 webhook payload（純函式，方便測試）。"""
+def build_payload(post: DiscordPost, avatar_url: str, mention_role_ids: tuple[str, ...] = ()) -> dict:
+    """組 webhook payload（純函式，方便測試）。mention_role_ids 有值＝訊息開頭 @ 這些身分組，白名單只放這些。"""
     label = _platform_label(post.platform)
     author_name = f"{label} · @{post.author}" if post.author else label
     description = "\n\n".join(p for p in (post.comment.strip(), post.summary.strip()) if p)
@@ -85,8 +85,10 @@ def build_payload(post: DiscordPost, avatar_url: str) -> dict:
     payload: dict = {
         "username": SNAKE_USERNAME,
         "embeds": [embed],
-        "allowed_mentions": {"parse": []},
+        "allowed_mentions": {"roles": list(mention_role_ids)} if mention_role_ids else {"parse": []},
     }
+    if mention_role_ids:
+        payload["content"] = " ".join(f"<@&{rid}>" for rid in mention_role_ids)
     if avatar_url:
         payload["avatar_url"] = avatar_url
     return payload
@@ -104,7 +106,7 @@ async def send_post_to_discord(
         logger.warning("Discord 出口未設定 DISCORD_WEBHOOK_URL，略過發送")
         return False
 
-    payload = build_payload(post, avatar)
+    payload = build_payload(post, avatar, DISCORD_MENTION_ROLE_IDS)
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_S) as client:
             response = await client.post(url, params={"wait": "true"}, json=payload)
