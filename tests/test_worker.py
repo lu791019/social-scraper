@@ -1,5 +1,7 @@
 """Mac 工作程式：claim → 處理 → done → LINE push；失敗重試語意與網路錯誤。"""
+import asyncio
 import json
+import time
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -88,3 +90,20 @@ def test_httpx_request_urls_are_not_logged():
     """httpx INFO 會把 Discord webhook 網址（含 token）寫進 log"""
     import logging
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+
+
+@pytest.mark.asyncio
+async def test_job_timeout_fails_job_instead_of_blocking_queue(monkeypatch):
+    """11/2 實例：IG 瀏覽器步驟無回應，worker 卡住 12 分鐘不拉下一筆。單筆超過 JOB_TIMEOUT_S 就當失敗回寫、繼續。"""
+    async def hang(platform, url):
+        await asyncio.sleep(10)
+        return JobOutcome("不該到這", {})
+    monkeypatch.setattr(worker, "JOB_TIMEOUT_S", 0.05)
+    calls: list = []
+    with patch("worker.run_job", hang), patch("worker.push_text") as push, patch("worker.record_final_error"):
+        started = time.monotonic()
+        status = await worker.handle_job(JOB, _inbox([], done_status="queued", calls=calls))
+    assert time.monotonic() - started < 2
+    assert status == "queued"
+    assert calls[0]["success"] is False and "逾時" in calls[0]["error"]
+    push.assert_not_called()

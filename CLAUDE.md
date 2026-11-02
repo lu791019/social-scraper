@@ -13,6 +13,7 @@
 - 本機 webhook 埠是 **8010**（`WEBHOOK_PORT`）。8000 被 channel-learn API 佔用，不要改回 8000
 - 備援 plist（`com.dex.social-scraper`、`com.dex.social-scraper.tunnel`）在 `deploy/`，目前**未安裝**；啟用 tunnel 會把 LINE webhook 改到 ngrok，恢復雲端要跑 `scripts/sync_line_webhook.py --url <Cloud Run>`
 - 備援與 worker 不可同時跑（都會處理 IG/Threads）
+- 單筆工作上限 `WORKER_JOB_TIMEOUT_S`（預設 900 秒）：11/2 實例是 IG 在換網路當下瀏覽器步驟無回應，worker 卡 12 分鐘不拉下一筆；逾時當失敗回寫（收件服務會重排），不會堵住佇列。卡住時 `launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker`，working 中的那筆 30 分鐘後由收件服務重新派
 - launchd PATH 很窄：plist 已補 `/opt/homebrew/bin` 與 `~/.local/bin`。`which claude` 在 cmux 終端會指到 cmux wrapper，launchd 用的是 `~/.local/bin/claude`
 - `.venv` 不存在或 patchright 升級後，要 `uv sync` + `uv run patchright install chromium`，否則爬蟲報 Executable doesn't exist
 
