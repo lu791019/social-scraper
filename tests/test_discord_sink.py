@@ -127,3 +127,34 @@ async def test_send_skips_when_webhook_not_configured():
         ok = await send_post_to_discord(_post(), webhook_url="", avatar_url="")
     assert ok is False
     client_cls.assert_not_called()
+
+
+# ── 身分組 tag（Dex 11/2：貼文要 @ 到「📰 情報訂閱」這類知識訂閱身分組）──
+def test_build_payload_mentions_roles_when_configured():
+    payload = build_payload(_post(), avatar_url="", mention_role_ids=("111", "222"))
+    assert payload["content"] == "<@&111> <@&222>"
+    assert payload["allowed_mentions"] == {"roles": ["111", "222"]}  # 只放白名單，不開 parse
+
+
+def test_build_payload_no_mention_by_default():
+    payload = build_payload(_post(), avatar_url="")
+    assert "content" not in payload
+    assert payload["allowed_mentions"] == {"parse": []}
+
+
+@pytest.mark.asyncio
+async def test_send_uses_configured_mention_roles():
+    resp = httpx.Response(200, request=httpx.Request("POST", "https://discord.test/x"))
+    client = _mock_client(response=resp)
+    with patch("services.discord_sink.httpx.AsyncClient", return_value=client), \
+         patch("services.discord_sink.DISCORD_MENTION_ROLE_IDS", ("333",)):
+        ok = await send_post_to_discord(_post(), webhook_url="https://discord.test/x", avatar_url="")
+    assert ok is True
+    payload = client.post.call_args.kwargs["json"]
+    assert payload["content"] == "<@&333>" and payload["allowed_mentions"] == {"roles": ["333"]}
+
+
+def test_config_parses_role_ids_from_env(monkeypatch):
+    from config import parse_role_ids
+    assert parse_role_ids(" 111, 222 ,,abc ") == ("111", "222")  # 只收數字 id，空白與雜字丟掉
+    assert parse_role_ids("") == ()

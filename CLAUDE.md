@@ -13,6 +13,7 @@
 - 本機 webhook 埠是 **8010**（`WEBHOOK_PORT`）。8000 被 channel-learn API 佔用，不要改回 8000
 - 備援 plist（`com.dex.social-scraper`、`com.dex.social-scraper.tunnel`）在 `deploy/`，目前**未安裝**；啟用 tunnel 會把 LINE webhook 改到 ngrok，恢復雲端要跑 `scripts/sync_line_webhook.py --url <Cloud Run>`
 - 備援與 worker 不可同時跑（都會處理 IG/Threads）
+- 單筆工作上限 `WORKER_JOB_TIMEOUT_S`（預設 900 秒）：11/2 實例是 IG 在換網路當下瀏覽器步驟無回應，worker 卡 12 分鐘不拉下一筆；逾時當失敗回寫（收件服務會重排），不會堵住佇列。卡住時 `launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker`，working 中的那筆 30 分鐘後由收件服務重新派
 - launchd PATH 很窄：plist 已補 `/opt/homebrew/bin` 與 `~/.local/bin`。`which claude` 在 cmux 終端會指到 cmux wrapper，launchd 用的是 `~/.local/bin/claude`
 - `.venv` 不存在或 patchright 升級後，要 `uv sync` + `uv run patchright install chromium`，否則爬蟲報 Executable doesn't exist
 
@@ -20,6 +21,12 @@
 - ngrok 帳號目前沒有靜態網域：每次重啟換網址，`scripts/run_tunnel.sh` 會自動 PUT 到 LINE 並跑 webhook test。領到靜態網域後填 `.env` 的 `NGROK_DOMAIN`
 - ngrok v3 沒有 `--web-addr` 旗標，inspector 固定用 ngrok.yml 的 `web_addr`（預設 127.0.0.1:4040）
 - LINE token 只放在 header；任何 log、錯誤訊息、回報都不能印出 token 或 Discord webhook URL
+
+## 11/2 實測教訓（Dex 要求記下，之後測試照這個走）
+- **測 tag／出口功能一律丟 Threads 連結**，不要用 IG：教室網路攔 instagram.com（FortiGate），IG 連結 3 次都失敗只是在測網路
+- **跑到一半換網路（Wi-Fi ↔ 手機熱點）會讓瀏覽器步驟永久卡住**：patchright driver 活著、Chromium 不見、主程序 0% CPU。處置：`launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker`；那筆 working 的工作由收件服務 30 分鐘後重派。要測網路相依的東西先換好網路再傳連結
+- 單筆逾時 `WORKER_JOB_TIMEOUT_S` 已補（預設 900 秒）；逾時訊息會帶到 LINE
+- 看卡在哪：`pgrep -lP <worker pid>`（子程序）＋ `lsof -nP -p <pid> | grep TCP`（CLOSE_WAIT 一排＝網路斷在半途）；py-spy 在 macOS 要 root，別浪費時間裝
 
 ## 爬蟲
 - 不需要關使用者的 Chrome：Patchright 用自帶 headless Chromium（獨立 profile）。不要寫 `pkill Chrome`
@@ -32,3 +39,4 @@
 - 只有 IG/Threads 發 Discord；GitHub、一般網頁先不發
 - 點評與標題來自摘要 prompt 的 `【Discord標題】`、`【Discord點評】` 段落；`_parse_summary_and_key_points` 會把它們切掉，Sheet 欄位內容不可被污染
 - Discord 失敗只記 log 回 False，不拋例外；測試一律 mock httpx，真發只在端到端驗證時做
+- 貼文 @ 身分組：`.env` 的 `DISCORD_MENTION_ROLE_IDS`（逗號分隔的 role id，目前是「📰 情報訂閱」1558327479104708618）；`allowed_mentions` 只放這些 id 的白名單，不開 `parse`。改了 `.env` 要 `launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker` 讓 worker 重讀。webhook 目前指到 #電影海報牆-脆與ig精選

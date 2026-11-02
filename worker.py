@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 
 import httpx
@@ -23,6 +24,7 @@ logger = logging.getLogger("worker")
 DONE_RETRIES = 5
 DONE_BACKOFF_S = 5.0
 ERROR_PREVIEW = 300
+JOB_TIMEOUT_S = float(os.environ.get("WORKER_JOB_TIMEOUT_S", "900"))  # 單筆上限（11/2：IG 瀏覽器步驟無回應卡住 12 分鐘，整條線停擺）
 
 
 class InboxClient:
@@ -55,20 +57,27 @@ class InboxClient:
         raise RuntimeError("unreachable")
 
 
+def _fail(job: dict, inbox: InboxClient, error: str) -> str:
+    """失敗回寫；收件服務判定不再重試（error）才記錄並 LINE 通知。"""
+    job_id, url, platform, user = job["id"], job["url"], job["platform"], job.get("line_user_id")
+    logger.error(f"job {job_id} 失敗：{error}")
+    state = inbox.done(job_id, False, error=error)
+    if state["status"] == "error":
+        record_final_error(platform, url, error)
+        push_text(user, f"❌ 處理失敗（已試 {state['attempts']} 次，不再重試）\n{url}\n\n{error}")
+    return state["status"]
+
+
 async def handle_job(job: dict, inbox: InboxClient) -> str:
     """處理一筆並回寫；回傳最終狀態（done / queued / error）。"""
     job_id, url, platform, user = job["id"], job["url"], job["platform"], job.get("line_user_id")
     logger.info(f"開始 job {job_id}（{platform}，第 {job['attempts']} 次）：{url}")
     try:
-        outcome = await run_job(platform, url)
+        outcome = await asyncio.wait_for(run_job(platform, url), timeout=JOB_TIMEOUT_S)
+    except TimeoutError:
+        return _fail(job, inbox, f"逾時：超過 {JOB_TIMEOUT_S:.0f} 秒沒做完（瀏覽器或下載卡住），已中止")
     except Exception as e:
-        error = f"{type(e).__name__}: {e}"[:ERROR_PREVIEW]
-        logger.error(f"job {job_id} 失敗：{error}")
-        state = inbox.done(job_id, False, error=error)
-        if state["status"] == "error":
-            record_final_error(platform, url, error)
-            push_text(user, f"❌ 處理失敗（已試 {state['attempts']} 次，不再重試）\n{url}\n\n{error}")
-        return state["status"]
+        return _fail(job, inbox, f"{type(e).__name__}: {e}"[:ERROR_PREVIEW])
 
     state = inbox.done(job_id, True, result=outcome.result)
     if state.get("changed", True):
