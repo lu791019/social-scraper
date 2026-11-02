@@ -22,6 +22,12 @@
 - ngrok v3 沒有 `--web-addr` 旗標，inspector 固定用 ngrok.yml 的 `web_addr`（預設 127.0.0.1:4040）
 - LINE token 只放在 header；任何 log、錯誤訊息、回報都不能印出 token 或 Discord webhook URL
 
+## 11/2 實測教訓（Dex 要求記下，之後測試照這個走）
+- **測 tag／出口功能一律丟 Threads 連結**，不要用 IG：教室網路攔 instagram.com（FortiGate），IG 連結 3 次都失敗只是在測網路
+- **跑到一半換網路（Wi-Fi ↔ 手機熱點）會讓瀏覽器步驟永久卡住**：patchright driver 活著、Chromium 不見、主程序 0% CPU。處置：`launchctl kickstart -k gui/$(id -u)/com.dex.social-scraper.worker`；那筆 working 的工作由收件服務 30 分鐘後重派。要測網路相依的東西先換好網路再傳連結
+- 單筆逾時 `WORKER_JOB_TIMEOUT_S` 已補（預設 900 秒）；逾時訊息會帶到 LINE
+- 看卡在哪：`pgrep -lP <worker pid>`（子程序）＋ `lsof -nP -p <pid> | grep TCP`（CLOSE_WAIT 一排＝網路斷在半途）；py-spy 在 macOS 要 root，別浪費時間裝
+
 ## 爬蟲
 - 不需要關使用者的 Chrome：Patchright 用自帶 headless Chromium（獨立 profile）。不要寫 `pkill Chrome`
 - Threads 2026 版面：目標貼文在 `__bbox.result.data.media`，`thread_items` 是其他推薦串。一律用網址短碼比對 `code` 欄位（`scraper/page_json.find_post_by_code`），不要取 `thread_items[0]`
